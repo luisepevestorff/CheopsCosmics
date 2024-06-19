@@ -161,3 +161,34 @@ cython_debug/
 
 #Ignore base data
 Data/
+Dace/
+Luise/SAA_visits/
+Luise/_pycache_/
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_visits/
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/Science_visits
+
+#Ignore large output files
+Luise/CR_density.png
+Luise/CR_density_MASCARA-1.png
+Luise/CR_density_SAA.png
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/_MACOSX/
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/output_plots/
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/_pycache_/
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/CR_density_science_visits_discrete.png
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/CR_density_science_binned.png
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/CR_density_science.png
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/CR_density_SAA_visits_discrete.png
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/CR_density_SAA_binned.png
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/CR_density_SAA.png
+
+#Ignore pkl files
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/all_data_SAA.pkl
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/all_data_science.pkl
+
+#Ignore literature
+CHEOPS-UGE-SOC-DD-002-i1.21_data_products_definition_document.pdf
+
+
+
+
+
