@@ -73,6 +73,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     enlarge_mask = True
     inspect_threshold = False
     inspect_mask = False
+    inspect_hist = True
 
     ### find the noise threshold with a gaussian fit ###
     # threshold_noise = find_threshold(derotated_openCV_images)[2]
@@ -95,10 +96,10 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     # print(find_threshold(derotated_openCV_images))
      
     # Correct the threshold using the stacking order
-    # threshold_noise *= np.sqrt(n_exp)
+    #threshold_noise *= np.sqrt(n_exp)
     # print(threshold_noise)
     
-    mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask)#, threshold = threshold_noise)
+    mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask, inspect_hist) #threshold = threshold_noise, 
 
     ### Apply mask ###
     masked_images = apply_mask_to_images(derotated_openCV_images, mask, 0)

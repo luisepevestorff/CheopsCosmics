@@ -211,11 +211,12 @@ def apply_mask_to_images(images, mask, value):
         
     return masked_images  
 
-def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science, enlarge_mask = True, inspect_threshold = False, inspect_mask = False):#, threshold = 0):
+def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science, enlarge_mask = True, inspect_threshold = False, inspect_mask = False, inspect_hist = True): #, threshold = 0)
     
     image_for_mask = np.nanmedian(derotated_openCV_images, axis=(0)) # median
+    image_for_hist = image_for_mask[image_for_mask != 0] # removed 0
     
-    threshold = find_threshold(image_for_mask)[2]
+    threshold = find_threshold(image_for_hist)[2]
 
     print(find_threshold(image_for_mask))
 
@@ -241,7 +242,7 @@ def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science,
     
     
                 
-    if inspect_threshold:
+    #if inspect_threshold:
         
         hist_median_image = image_for_mask.copy()
         
@@ -293,9 +294,20 @@ def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science,
         plt.colorbar(im)
 
         plt.show()
-        
-        
+           
     # Count the number of pixel that are neither in the mask, neither on the edges. I.E., the pixels used for detection
+
+    if inspect_hist:
+
+        x_hist = find_threshold(image_for_mask)[4]
+        params = find_threshold(image_for_mask)[3]
+        gauss = gaussian(x_hist, *params)
+
+        fig,ax = plt.subplots()
+        ax.hist(image_for_hist.flatten(), bins = 1000)
+        ax.plot(x_hist, gauss, 'r', label='Gaussian Fit')
+        plt.show()
+
     
     #get_edges_mask(image)
 
@@ -472,31 +484,62 @@ def get_file_path_lists(directory,visit_list,string_to_search):
                     continue
     return file_list
 
-def find_threshold(image):
+def find_threshold(image, inspect_hist=False):
     images = image.copy()
 
     flatten_images = np.ndarray.flatten(images)
-    flattened_Array_Gauss = [i for i in flatten_images if (i >= 10) and (i <= 500)]
+    flatten_images = flatten_images[flatten_images!= 0]
+    #flattened_images = [i for i in images if (i >= 10) and (i <= 500)] #in case of trimming the data
 
     ### using norm function ##
     # mu, sigma = norm.fit(flatten_images)
 
     ### using scipy stats ###
-    n, bins= np.histogram(flattened_Array_Gauss, bins=1000)
 
-    mu_initial = np.mean(flattened_Array_Gauss)                  
-    sigma_initial = std = np.std(flattened_Array_Gauss)
+    hist, bin_edges, patches= plt.hist(flatten_images, bins=1000)
+    #hist=hist/np.sum(hist)
 
-    x = np.linspace(10,500,1000)
-    y = n
+    bin_treshold = 50 # threshold for minimum bin population
 
-    popt,pcov=curve_fit(gaussian,x,y,p0=[150, mu_initial, sigma_initial])
+    n = len(hist)
+
+    #x = np.linspace(10,500,1000)
+    x = np.zeros((n),dtype=float) 
+    for i in range(n):
+        x[i] = (bin_edges[i+1]+bin_edges[i])/2
+
+    
+    hist_where = np.where(hist >= bin_treshold)
+    x = x[hist_where]
+    y = hist[hist_where]
+
+    mu_initial = np.mean(flatten_images)                  
+    sigma_initial = np.std(flatten_images)
+    #amp_initial = np.max(y)
+
+    popt,pcov=curve_fit(gaussian,x,y,p0=[500, mu_initial, sigma_initial])
 
     mu_fit =  popt[1]
     sigma_fit = popt[2]
 
     threshold = mu_fit + (5*sigma_fit)
-    return mu_fit, sigma_fit, threshold
+
+    if inspect_hist:
+        x_hist = x
+        params = popt
+        gauss = gaussian(x_hist, *params)
+
+        fig,ax = plt.subplots()
+        ax.hist(flatten_images, bins = 1000)
+        ax.plot(x_hist, gauss, 'r', label='Gaussian Fit')
+        plt.show()
+
+    return mu_fit, sigma_fit, threshold, popt, x
+
+    ### using an exponential fit ###
 
 def gaussian(x,amp,mu,sigma):
     return amp*np.exp(-(x-mu)**2/2*sigma**2)
+
+def exponential(x, m, t, b):
+    return m*np.exp(-(t*x)+b)
