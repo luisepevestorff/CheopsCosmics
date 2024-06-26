@@ -218,7 +218,7 @@ def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science,
     
     threshold = find_threshold(image_for_hist)[2]
 
-    print(find_threshold(image_for_mask))
+    #print(find_threshold(image_for_mask))
 
     if saa_or_science == 'SAA':
         mask = image_for_mask > threshold
@@ -306,6 +306,7 @@ def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science,
         fig,ax = plt.subplots()
         ax.hist(image_for_hist.flatten(), bins = 1000)
         ax.plot(x_hist, gauss, 'r', label='Gaussian Fit')
+        plt.title('inspect hist')
         plt.show()
 
     
@@ -496,10 +497,10 @@ def find_threshold(image, inspect_hist=False):
 
     ### using scipy stats ###
 
-    hist, bin_edges, patches= plt.hist(flatten_images, bins=1000)
+    hist, bin_edges = np.histogram(flatten_images, bins=1000)
     #hist=hist/np.sum(hist)
 
-    bin_treshold = 50 # threshold for minimum bin population
+    bin_treshold = 20 # threshold for minimum bin population
 
     n = len(hist)
 
@@ -513,11 +514,11 @@ def find_threshold(image, inspect_hist=False):
     x = x[hist_where]
     y = hist[hist_where]
 
-    mu_initial = np.mean(flatten_images)                  
+    mu_initial = x[np.argmax(y)]              
     sigma_initial = np.std(flatten_images)
-    #amp_initial = np.max(y)
+    amp_initial = np.max(y)
 
-    popt,pcov=curve_fit(gaussian,x,y,p0=[500, mu_initial, sigma_initial])
+    popt,pcov=curve_fit(gaussian,x,y,p0=[amp_initial, mu_initial, sigma_initial])
 
     mu_fit =  popt[1]
     sigma_fit = popt[2]
@@ -532,6 +533,7 @@ def find_threshold(image, inspect_hist=False):
         fig,ax = plt.subplots()
         ax.hist(flatten_images, bins = 1000)
         ax.plot(x_hist, gauss, 'r', label='Gaussian Fit')
+        plt.title('Histogram inspection')
         plt.show()
 
     return mu_fit, sigma_fit, threshold, popt, x
@@ -543,3 +545,30 @@ def gaussian(x,amp,mu,sigma):
 
 def exponential(x, m, t, b):
     return m*np.exp(-(t*x)+b)
+
+def remove_straylight(masked_images):
+    masked_array = masked_images.copy()
+
+    #calculate median/mean of each image in array (background) -> to do: test if mean or median works better
+    median_per_image = []
+    mean_per_image = []
+    for i in range(len(masked_array)):
+        median_per_image.append(np.median(masked_array[i]))
+        mean_per_image.append(np.mean(masked_array[i]))
+
+    #calculate median/mean of new array
+    median_new = np.median(median_per_image)
+    mean_new = np.mean(median_per_image)
+
+    background_threshold = median_new + 10 #arbitrary number for now -> see what will filter stray light the best
+
+    #remove images above background threshold
+    array_coordinates = np.where(median_per_image < background_threshold)
+
+    array_removed_straylight =  masked_array[array_coordinates]
+    return array_removed_straylight
+
+
+
+
+

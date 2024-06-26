@@ -100,12 +100,21 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     # print(threshold_noise)
     
     mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask, inspect_hist) #threshold = threshold_noise, 
+    mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask, inspect_hist) #threshold = threshold_noise, 
 
     ### Apply mask ###
     masked_images = apply_mask_to_images(derotated_openCV_images, mask, 0)
 
+    print('before: ', len(masked_images))
+
+    ### Remove images with stray light ###
+
+    masked_images_wo_straylight = remove_straylight(masked_images)
+
+    print('after: ', len(masked_images_wo_straylight))
+
     ### Detect cosmics ###
-    binary_images, nb_cosmics, images_contours = detect_cosmics(masked_images, threshold_cosmics) 
+    binary_images, nb_cosmics, images_contours = detect_cosmics(masked_images_wo_straylight, threshold_cosmics) 
     
     plt_show = True
     plt.close('all')
