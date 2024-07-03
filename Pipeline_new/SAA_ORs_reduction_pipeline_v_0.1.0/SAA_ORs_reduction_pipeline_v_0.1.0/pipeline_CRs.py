@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 # # Main loop of entire process
    
+MAIN_PATH = Path.cwd() / "Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0"
+
 def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_of_visit, generate_plots):
 
     ### Get images and metadata ###
@@ -238,12 +240,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
 ###### On the compute node #######
 ##################################
 
-
-# Path of the folder in which all the code + visits are located
-mainPath = Path.cwd() / "Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0"
-
-
-directory_path = mainPath / "test_visits"
+directory_path = MAIN_PATH / "test_visits"
 
 image_files_list, roll_angle_files_list = get_files_with_substring(directory_path)
 
@@ -340,6 +337,6 @@ all_data = all_data.sort_index()
 
 
 file_name = 'all_data.pkl'
-save_path = mainPath / file_name
+save_path = MAIN_PATH / file_name
 
 all_data.to_pickle(save_path, compression='infer', protocol=5, storage_options=None)
