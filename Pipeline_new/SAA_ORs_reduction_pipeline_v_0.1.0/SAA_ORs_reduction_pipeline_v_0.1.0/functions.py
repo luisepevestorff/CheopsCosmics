@@ -1,27 +1,29 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib import colors
 from astropy.io import fits
 import numpy as np
 from scipy.optimize import curve_fit
-from scipy.stats import norm
 import os
 import cv2
-import fnmatch
-#from pymd import PyMD
-#from pymd.model import Visit
 from pathlib import Path
 from sqlalchemy import text
-import pathlib as Path
 
+MAIN_PATH = Path.cwd() / "Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0"
 
-
-def get_files_with_substring(directory, substring):
-    matching_files = []
-    for root, _, files in os.walk(directory):
-        for filename in files:
-            if fnmatch.fnmatch(filename, f"*{substring}*"):
-                matching_files.append(os.path.join(root, filename))
-    return matching_files
+def get_files_with_substring(directory):
+    
+    image_files_list = []
+    roll_angle_files_list = []      
+    
+    for filename in directory.iterdir():
+        if 'RAW_SubArray' in filename.stem:
+            image_files_list.append(filename)
+        elif ('Attitude' in filename.stem) or ('COR_Lightcurve-DEFAULT' in filename.stem):
+            roll_angle_files_list.append(filename)
+        else:
+            raise NameError(f"{filename} is an unexpected file that does not contain 'RAW_SubArray', 'Attitude', or 'COR_Lightcurve-DEFAULT.")
+    return image_files_list, roll_angle_files_list
 
 def read_images(file):
     
@@ -139,19 +141,7 @@ def subtract_median_image(images, circular_mask):
 
     median_images = np.abs(median_images)
     return median_images
-   # images = images.astype(np.uint8)
 
-    openCV_images = np.zeros((nb_images, width_images, height_images), dtype=np.uint8)
-    max_range_image = 66000
-    norm_cste = max_range_image #np.max(images)
-    
-    for i in range(len(images)):
-        #openCV_images[i] = cv2.normalize(images[i]*255/norm_cste, None, 0, 255, cv2.NORM_MINMAX)
-        openCV_images[i] = images[i]*255/norm_cste
-        ## Optionally, use cv2.convertScaleAbs() for quick conversion and scaling
-        #openCV_images[i] = cv2.convertScaleAbs(images[i])
-        
-    return openCV_images
 
 def derotate_SAA(attitude_file, images, metadata_images, nb_images, height_images, width_images):
     
@@ -211,12 +201,14 @@ def apply_mask_to_images(images, mask, value):
         
     return masked_images  
 
-def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science, enlarge_mask = True, inspect_threshold = False, inspect_mask = False, inspect_hist = True): #, threshold = 0)
+def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science, enlarge_mask = True, inspect_threshold = False, inspect_mask = False, threshold = 0, inspect_hist = False):
     
     image_for_mask = np.nanmedian(derotated_openCV_images, axis=(0)) # median
-    image_for_hist = image_for_mask[image_for_mask != 0] # removed 0
     
-    threshold = find_threshold(image_for_hist)[2]
+    ### LUISE Threshold finding, to be activated ###
+    # image_for_hist = image_for_mask[image_for_mask != 0] # removed 0
+    
+    # threshold = find_threshold(image_for_hist)[2]
 
     #print(find_threshold(image_for_mask))
 
@@ -242,7 +234,7 @@ def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science,
     
     
                 
-    #if inspect_threshold:
+    if inspect_threshold:
         
         hist_median_image = image_for_mask.copy()
         
@@ -269,10 +261,6 @@ def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science,
         ax[2].axvline(threshold, c = 'C1', label='Threshold')
         ax[2].legend()
         ax[2].set_title('CDF of the pixel values', weight = 'bold')
-                
-        plt.show()
-            
-    #if inspect_mask:
         
         image_masked = image_for_mask.copy()
         image_masked[final_mask] = 0
@@ -293,24 +281,22 @@ def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science,
         ax[3].set_title('Applied mask', weight = 'bold')
         plt.colorbar(im)
 
-        plt.show()
-           
-    # Count the number of pixel that are neither in the mask, neither on the edges. I.E., the pixels used for detection
+        # plt.show()
+        
+        
+    # if inspect_hist:
 
-    if inspect_hist:
+    #     x_hist = find_threshold(image_for_mask)[4]
+    #     params = find_threshold(image_for_mask)[3]
+    #     gauss = gaussian(x_hist, *params)
 
-        x_hist = find_threshold(image_for_mask)[4]
-        params = find_threshold(image_for_mask)[3]
-        gauss = gaussian(x_hist, *params)
-
-        fig,ax = plt.subplots()
-        ax.hist(image_for_hist.flatten(), bins = 1000)
-        ax.plot(x_hist, gauss, 'r', label='Gaussian Fit')
-        plt.title('inspect hist')
-        plt.show()
+    #     fig,ax = plt.subplots()
+    #     ax.hist(image_for_hist.flatten(), bins = 1000)
+    #     ax.plot(x_hist, gauss, 'r', label='Gaussian Fit')
+    #     plt.title('inspect hist')
+    #     plt.show()
 
     
-    #get_edges_mask(image)
 
     return final_mask, threshold
     
@@ -416,19 +402,24 @@ def create_circular_mask(size, radius):
     
     return mask_circular
 
-def database_query(start_time, end_time):
-        
-    # copy the database here
-    #print('\n Copying db ...')
-    #command = 'scp chps_ops@chpscn02:/opt/monitoring_dashboard_database/monitoring_dashboard.db .'
-    #subprocess.run(command, shell=True)
+def database_query(start_time, end_time, copy):
     
+    from pymd import PyMD
+    from pymd.model import Visit
+    
+    if copy:
+        import subprocess 
+        # copy the database here
+        print('\n Copying db ...')
+        command = 'scp chps_ops@chpscn02:/opt/monitoring_dashboard_database/monitoring_dashboard.db .'
+        subprocess.run(command, shell=True)
+        database= Path.cwd() / "monitoring_dashboard.db"
+    else: 
+        database=Path("/projects/astro/cheops/processing/chpscn02/opt/monitor4cheops/Operations/monitoring_dashboard.db")
+        
     
     print(f'\n Getting all visits ID (except M&C) from {start_time} to {end_time} ...')
-    
-    database=Path("/opt/monitor4cheops/Operations/monitoring_dashboard.db"),
 
-    
     # format time 
     filename_format = "%Y-%m-%d %H:%M:%S.000"
     start_time_str = start_time.strftime(filename_format)
@@ -467,24 +458,74 @@ def database_query(start_time, end_time):
             
             
     return visit_id_list      
-  
-def get_file_path_lists(directory,visit_list,string_to_search):
-    
-    file_list = []
-        
-    for visit in visit_list:
-        PR_type = visit.split('_')[0][:4]
-        visit_id = visit
-        folder_visit_path = directory + PR_type + '/' + visit_id + '/'
-        for subdir, dir, files in os.walk(folder_visit_path): # Iterate through the PR type folder
-        #for subdir, dir, files in os.walk(folder_visit_path): # Iterate through the PR type folder
-            for file in files:
-                if string_to_search in file: 
-                    file_list.append(os.path.join(subdir, file))
-                else:
-                    continue
-    return file_list
 
+
+def genreate_diagnostic_plots(derotated_openCV_images, images, subtracted_median_images, temporal_median_substracted_images, threshold_noise, threshold_cosmics, mask, masked_images, binary_images, n, nb_cosmics, title, plot_name, show_plot):
+    
+    plt.close('all')
+    fig, ax = plt.subplots(ncols = 8, nrows=2, figsize=(35,8))
+    plt.subplots_adjust(left=0.05, right=0.99)
+    median_image = np.nanmedian(derotated_openCV_images, axis=(0))
+    mean_image = np.nanmean(derotated_openCV_images, axis=(0))
+    
+    # ax[0,0].hist(np.log(images[n]+1).flatten(), bins = 100)
+    # ax[1,0].imshow(np.log(images[n]+1), origin = "lower")
+    # ax[0,0].set_title("Original subArray (log)")
+    ax[0,0].hist(images[n].flatten(), bins = 100)
+    ax[1,0].imshow(images[n], origin = "lower")
+    ax[0,0].set_title("Original subArray")
+    ax[0,0].set_ylim(0,100)
+    ax[0,1].hist(subtracted_median_images[n].flatten(), bins = 100)#len(np.unique(subtracted_median_images[n].flatten())))
+    ax[1,1].imshow(subtracted_median_images[n], origin = "lower")
+    ax[0,1].set_title("median value removed")
+    ax[0,1].set_ylim(0,100)
+    ax[0,2].hist(temporal_median_substracted_images[n].flatten(), bins = 100)#len(np.unique(temporal_median_substracted_images[n].flatten())))
+    ax[1,2].imshow(temporal_median_substracted_images[n], origin = "lower")
+    ax[0,2].set_title("median of pixels removed")
+    ax[0,2].set_ylim(0,100)
+    # ax[0,3].hist(derotated_openCV_images[n].flatten(), bins = len(np.unique(derotated_openCV_images[n].flatten())))
+    # ax[1,3].imshow(derotated_openCV_images[n], origin = "lower")
+    # ax[0,3].set_title("derotated converted image")
+    # ax[0,3].hist(np.log(derotated_openCV_images[n].flatten()+1), bins = len(np.unique(derotated_openCV_images[n].flatten())))
+    ax[1,3].imshow(np.log(derotated_openCV_images[n]+1), origin = "lower")
+    ax[0,3].set_ylim(0,500)
+    ax[0,3].set_title("log(derotated converted image)")
+    #ax[0,3].set_xscale('log')
+    ax[0,4].hist(median_image.flatten(), bins = len(np.unique(median_image.flatten())))
+    ax[0,4].axvline(threshold_noise, c = 'C2', linewidth = 2)
+    ax[1,4].imshow(median_image, origin = "lower",norm=colors.LogNorm())
+    ax[0,4].set_xlim(0,5*threshold_noise)
+    ax[0,4].set_title("median image of visit")
+    #ax[0,4].set_xscale('log')
+    # ax[0,5].hist(mean_image.flatten(), bins = len(np.unique(mean_image.flatten())))
+    # ax[0,5].axvline(threshold_noise, c = 'C2', linewidth = 2)
+    # ax[1,5].imshow(mean_image, origin = "lower")
+    # ax[0,5].set_ylim(0,100)
+    # ax[0,5].set_title("mean image of visit")
+    ax[1,5].imshow(mask, origin = "lower")
+    ax[0,5].set_ylim(0,100)
+    ax[0,5].set_title("designed mask")
+    # ax[0,6].hist(np.log(masked_images[n]+0.1).flatten(), bins = len(np.unique(masked_images[n].flatten())))
+    # ax[1,6].imshow(np.log(masked_images[n]+0.1), origin = "lower")
+    # ax[0,6].axvline(np.log(threshold_cosmics+0.1), c = 'C2', linewidth = 2)
+    # ax[0,6].set_title("log(masked image + 0.1)")
+    ax[0,6].hist(masked_images[n].flatten(), bins = 100)# len(np.unique(masked_images[n].flatten())))
+    ax[1,6].imshow(masked_images[n], origin = "lower")
+    ax[0,6].axvline(threshold_cosmics, c = 'C2', linewidth = 2)
+    ax[0,6].set_title("masked image")
+    ax[0,6].set_xlim(0,5*threshold_cosmics)
+    ax[0,6].set_ylim(0,100)
+    ax[0,7].hist(binary_images[n].flatten(), bins = len(np.unique(binary_images[n].flatten())))
+    ax[1,7].imshow(binary_images[n], origin = "lower")
+    ax[0,7].text(0.25,0.9,f"{int(nb_cosmics)} detected cosmics", weight = 'bold', transform=ax[0,7].transAxes)
+    ax[0,7].set_title("detected cosmics")
+    fig.suptitle(title)
+    savePath = MAIN_PATH / "output_plots" / plot_name
+    plt.savefig(savePath, dpi = 600,format = 'png')
+        
+    if show_plot:
+        plt.show()
+        
 def find_threshold(image, inspect_hist=False):
     images = image.copy()
 
@@ -567,8 +608,4 @@ def remove_straylight(masked_images):
 
     array_removed_straylight =  masked_array[array_coordinates]
     return array_removed_straylight
-
-
-
-
 
