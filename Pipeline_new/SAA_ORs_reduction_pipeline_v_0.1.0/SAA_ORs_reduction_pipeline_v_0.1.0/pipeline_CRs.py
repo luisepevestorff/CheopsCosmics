@@ -113,6 +113,9 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
 
     print('after: ', len(masked_images_wo_straylight))
 
+    ### adjust number of images after straylight images are removed ###
+    nb_images = len(masked_images_wo_straylight)
+
     ### Detect cosmics ###
     binary_images, nb_cosmics, images_contours = detect_cosmics(masked_images_wo_straylight, threshold_cosmics) 
     

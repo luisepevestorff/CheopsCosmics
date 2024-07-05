@@ -497,10 +497,10 @@ def find_threshold(image, inspect_hist=False):
 
     ### using scipy stats ###
 
-    hist, bin_edges = np.histogram(flatten_images, bins=1000)
+    hist, bin_edges = np.histogram(flatten_images, bins=10000)
     #hist=hist/np.sum(hist)
 
-    bin_treshold = 20 # threshold for minimum bin population
+    bin_treshold = 200 # threshold for minimum bin population
 
     n = len(hist)
 
@@ -531,15 +531,14 @@ def find_threshold(image, inspect_hist=False):
         gauss = gaussian(x_hist, *params)
 
         fig,ax = plt.subplots()
-        ax.hist(flatten_images, bins = 1000)
+        ax.hist(flatten_images, bins = 10000)
         ax.plot(x_hist, gauss, 'r', label='Gaussian Fit')
         plt.title('Histogram inspection')
         plt.show()
 
     return mu_fit, sigma_fit, threshold, popt, x
 
-    ### using an exponential fit ###
-
+    
 def gaussian(x,amp,mu,sigma):
     return amp*np.exp(-(x-mu)**2/2*sigma**2)
 
