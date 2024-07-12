@@ -184,6 +184,7 @@ Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1
 #Ignore pkl files
 Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/all_data_SAA.pkl
 Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/all_data_science.pkl
+Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/all_data.pkl
 
 #Ignore literature
 CHEOPS-UGE-SOC-DD-002-i1.21_data_products_definition_document.pdf

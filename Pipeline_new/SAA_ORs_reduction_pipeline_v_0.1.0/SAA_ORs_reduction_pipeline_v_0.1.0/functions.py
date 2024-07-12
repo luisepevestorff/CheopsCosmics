@@ -12,6 +12,7 @@ import fnmatch
 from pathlib import Path
 from sqlalchemy import text
 import pathlib as Path
+from sklearn.mixture import GaussianMixture
 
 
 
@@ -211,12 +212,12 @@ def apply_mask_to_images(images, mask, value):
         
     return masked_images  
 
-def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science, enlarge_mask = True, inspect_threshold = False, inspect_mask = False, inspect_hist = True): #, threshold = 0)
+def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science, enlarge_mask = True, inspect_threshold = False, inspect_mask = False, inspect_hist = False): #, threshold = 0)
     
     image_for_mask = np.nanmedian(derotated_openCV_images, axis=(0)) # median
     image_for_hist = image_for_mask[image_for_mask != 0] # removed 0
     
-    threshold = find_threshold(image_for_hist)[2]
+    threshold = find_threshold(image_for_hist)[0]
 
     #print(find_threshold(image_for_mask))
 
@@ -299,13 +300,13 @@ def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science,
 
     if inspect_hist:
 
-        x_hist = find_threshold(image_for_mask)[4]
-        params = find_threshold(image_for_mask)[3]
-        gauss = gaussian(x_hist, *params)
+        x_hist = find_threshold(image_for_mask)[5]
+        params = find_threshold(image_for_mask)[4]
+        fit = hyperbolic(x_hist, *params)
 
         fig,ax = plt.subplots()
         ax.hist(image_for_hist.flatten(), bins = 1000)
-        ax.plot(x_hist, gauss, 'r', label='Gaussian Fit')
+        ax.plot(x_hist, fit, 'r', label='Fit')
         plt.title('inspect hist')
         plt.show()
 
@@ -485,7 +486,7 @@ def get_file_path_lists(directory,visit_list,string_to_search):
                     continue
     return file_list
 
-def find_threshold(image, inspect_hist=False):
+def find_threshold(image, inspect_hist=True):
     images = image.copy()
 
     flatten_images = np.ndarray.flatten(images)
@@ -497,10 +498,10 @@ def find_threshold(image, inspect_hist=False):
 
     ### using scipy stats ###
 
-    hist, bin_edges = np.histogram(flatten_images, bins=10000)
+    hist, bin_edges = np.histogram(flatten_images, bins=1000)
     #hist=hist/np.sum(hist)
 
-    bin_treshold = 200 # threshold for minimum bin population
+    bin_treshold = 100 # threshold for minimum bin population
 
     n = len(hist)
 
@@ -514,36 +515,121 @@ def find_threshold(image, inspect_hist=False):
     x = x[hist_where]
     y = hist[hist_where]
 
-    mu_initial = x[np.argmax(y)]              
-    sigma_initial = np.std(flatten_images)
-    amp_initial = np.max(y)
+    ### Gaussian ###
+    # mu_initial = x[np.argmax(y)]              
+    # sigma_initial = np.std(flatten_images)
+    # amp_initial = np.max(y)
 
-    popt,pcov=curve_fit(gaussian,x,y,p0=[amp_initial, mu_initial, sigma_initial])
+    # popt,pcov=curve_fit(gaussian,x,y,p0=[amp_initial, mu_initial, sigma_initial])
 
-    mu_fit =  popt[1]
-    sigma_fit = popt[2]
+    # mu_fit =  popt[1]
+    # sigma_fit = popt[2]
 
-    threshold = mu_fit + (5*sigma_fit)
+    # threshold = mu_fit + (5*sigma_fit)
+
+    # if inspect_hist:
+    #     x_hist = x
+    #     params = popt
+    #     fit = gaussian(x_hist, *params)
+
+    #     fig,ax = plt.subplots()
+    #     ax.hist(flatten_images, bins = 10000)
+    #     ax.plot(x_hist, fit, 'r', label='Gaussian Fit')
+    #     plt.title('Histogram inspection')
+    #     plt.show()
+
+    # return mu_fit, sigma_fit, threshold, popt, x
+
+    ### Gaussian Mixture Model###
+    gmm = GaussianMixture(n_components = 1)
+    gmm = gmm.fit(y.reshape(-1, 1))
+
+    gmm_x = x
+    gmm_y = np.exp(gmm.score_samples(gmm_x.reshape(-1,1)))
+
+    threshold = 50 #arbitrary for testing purposes
 
     if inspect_hist:
         x_hist = x
-        params = popt
-        gauss = gaussian(x_hist, *params)
 
         fig,ax = plt.subplots()
-        ax.hist(flatten_images, bins = 10000)
-        ax.plot(x_hist, gauss, 'r', label='Gaussian Fit')
+        ax.hist(flatten_images, bins = 1000)
+        ax.plot(gmm_x, gmm_y, 'r')
         plt.title('Histogram inspection')
         plt.show()
-
-    return mu_fit, sigma_fit, threshold, popt, x
-
     
+    return threshold, x
+
+
+    ### Exponential ###
+
+    # rate_of_decay = np.min(y)/np.max(y)
+    # max_index = np.argmax(y)
+
+    # m_initial = np.max(y)
+    # t_initial = rate_of_decay
+    # b_initial = x[max_index]
+
+    # popt,pcov=curve_fit(exponential,x,y,p0=[m_initial, t_initial, b_initial])
+
+    # m_fit = popt[0]
+    # t_fit = popt[1]
+    # b_fit = popt[2]
+
+    # threshold = 50 #arbitrary for testing purposes
+
+    # if inspect_hist:
+    #     x_hist = x
+    #     params = popt
+    #     fit = exponential(x_hist, *params)
+
+    #     fig,ax = plt.subplots()
+    #     ax.hist(flatten_images, bins = 10000)
+    #     ax.plot(x_hist, fit, 'r', label='Exponential Fit')
+    #     plt.title('Histogram inspection')
+    #     plt.show()
+    
+    # return m_fit, t_fit, b_fit, threshold, popt, x
+
+    ### Hyperbolic ###
+
+    # max_index = np.argmax(y)
+
+    # a_initial = 1
+    # p_initial = 5
+    # #-(x[max_index])
+    # q_initial = 0
+
+    # popt,pcov=curve_fit(hyperbolic,x,y,p0=[a_initial, p_initial, q_initial])
+
+    # a_fit = popt[0]
+    # p_fit = popt[1]
+    # q_fit = popt[2]
+
+    # threshold = 50 #arbitrary for testing purposes
+
+    # if inspect_hist:
+    #     x_hist = x
+    #     params = popt
+    #     fit = exponential(x_hist, *params)
+
+    #     fig,ax = plt.subplots()
+    #     ax.hist(flatten_images, bins = 10000)
+    #     ax.plot(x_hist, fit, 'r', label='Exponential Fit')
+    #     plt.title('Histogram inspection')
+    #     plt.show()
+    
+    # return a_fit, p_fit, q_fit, threshold, popt, x
+
+
 def gaussian(x,amp,mu,sigma):
     return amp*np.exp(-(x-mu)**2/2*sigma**2)
 
 def exponential(x, m, t, b):
     return m*np.exp(-(t*x)+b)
+
+def hyperbolic(x, a, p, q):
+    return (a/(x+p))+q
 
 def remove_straylight(masked_images):
     masked_array = masked_images.copy()
@@ -562,10 +648,10 @@ def remove_straylight(masked_images):
     background_threshold = median_new + 10 #arbitrary number for now -> see what will filter stray light the best
 
     #remove images above background threshold
-    array_coordinates = np.where(median_per_image < background_threshold)
+    array_coordinates, = np.where(median_per_image < background_threshold)
 
-    array_removed_straylight =  masked_array[array_coordinates]
-    return array_removed_straylight
+    #array_removed_straylight =  masked_array[array_coordinates]
+    return array_coordinates
 
 
 

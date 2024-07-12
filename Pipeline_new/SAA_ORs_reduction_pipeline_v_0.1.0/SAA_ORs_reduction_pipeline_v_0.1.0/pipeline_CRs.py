@@ -100,7 +100,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     # print(threshold_noise)
     
     mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask, inspect_hist) #threshold = threshold_noise, 
-    mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask, inspect_hist) #threshold = threshold_noise, 
+    #mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask, inspect_hist) #threshold = threshold_noise, 
 
     ### Apply mask ###
     masked_images = apply_mask_to_images(derotated_openCV_images, mask, 0)
@@ -109,12 +109,14 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
 
     ### Remove images with stray light ###
 
-    masked_images_wo_straylight = remove_straylight(masked_images)
+    straylight_coordinates = remove_straylight(masked_images)
+    masked_images_wo_straylight = masked_images[straylight_coordinates]
 
     print('after: ', len(masked_images_wo_straylight))
 
     ### adjust number of images after straylight images are removed ###
     nb_images = len(masked_images_wo_straylight)
+
 
     ### Detect cosmics ###
     binary_images, nb_cosmics, images_contours = detect_cosmics(masked_images_wo_straylight, threshold_cosmics) 
@@ -200,9 +202,9 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     
     print(f'{nb_masked_pixels} masked pixels')
     
-    flattened_images           = [image.flatten() for image in images_orig]
-    flattened_derotated_images = [image.flatten() for image in derotated_openCV_images]
-    flattened_masked_images    = [image.flatten() for image in masked_images]
+    flattened_images           = [image.flatten() for image in images_orig[straylight_coordinates]]
+    flattened_derotated_images = [image.flatten() for image in derotated_openCV_images[straylight_coordinates]]
+    flattened_masked_images    = [image.flatten() for image in masked_images[straylight_coordinates]]
     flattened_binary_images    = [image.flatten() for image in binary_images]
     
     flattened_mask = []
@@ -212,6 +214,8 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     latitude = [metadata['LATITUDE'] for metadata in metadata_images]
     longitude = [metadata['LONGITUDE'] for metadata in metadata_images]
 
+    latitude = np.array(latitude)
+    longitude = np.array(longitude)
 
     data = pd.DataFrame(data =    {
                                 'visit_ID': np.full(nb_images, id),
@@ -221,8 +225,8 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 'masked_images': flattened_masked_images, 
                                 'binary_images': flattened_binary_images, 
                                 #'mask': flattened_mask,
-                                'JD': time_images_utc_jd,
-                                'time': time_images_utc,
+                                'JD': time_images_utc_jd[straylight_coordinates],
+                                'time': time_images_utc[straylight_coordinates],
                                 'nb_cosmics' : nb_cosmics.astype(int),
                                 'density_cosmics' : density_cosmics,
                                 'pix_cosmics': images_contours,
@@ -231,15 +235,15 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 'threshold_cosmics': np.full(nb_images, threshold_cosmics),
                                 'n_exp': np.full(nb_images, n_exp),
                                 'exp_time': np.full(nb_images, exp_time),
-                                'los_to_sun': np.full(nb_images, los_to_sun),
-                                'los_to_moon': np.full(nb_images, los_to_moon),
-                                'los_to_earth': np.full(nb_images, los_to_earth),
+                                'los_to_sun': np.full(nb_images, los_to_sun[straylight_coordinates]),
+                                'los_to_moon': np.full(nb_images, los_to_moon[straylight_coordinates]),
+                                'los_to_earth': np.full(nb_images, los_to_earth[straylight_coordinates]),
                                 'target_name': np.full(nb_images, target_name),
                                 'mag_G': np.full(nb_images, mag_G),
                                 'ra': np.full(nb_images, ra),
                                 'dec': np.full(nb_images, dec),
-                                'LATITUDE': latitude,
-                                'LONGITUDE': longitude
+                                'LATITUDE': latitude[straylight_coordinates],
+                                'LONGITUDE': longitude[straylight_coordinates]
                                 }
     )
     
