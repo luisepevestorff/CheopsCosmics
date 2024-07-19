@@ -1,16 +1,16 @@
-import matplotlib.pyplot as plt
-from matplotlib import colors
 import numpy as np
-import ipywidgets
 import pandas as pd
 from scipy.stats import binned_statistic_2d
 from functions import *
 from datetime import datetime
-import pathlib
- 
+from pathlib import Path
+
 # # Main loop of entire process
-   
-def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_of_visit):
+
+MAIN_PATH = Path.cwd() / "Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0"
+
+
+def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_of_visit, generate_plots):
 
     ### Get images and metadata ###
     images_orig, header_images, metadata_images, nb_images, height_images, width_images = read_images(Images)
@@ -67,7 +67,6 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
         derotated_openCV_images, time_images_utc, time_images_utc_jd, _ = derotate_SAA(roll_angle_file, temporal_median_substracted_images, metadata_images, nb_images, height_images, width_images)
     else:
         raise ("Type of visit must be either 'subarray' or 'imagette'")
-    
 
     ### Design mask for contaminant ###
     enlarge_mask = True
@@ -75,105 +74,45 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     inspect_mask = False
     inspect_hist = False
 
+     
+    # Correct the threshold using the stacking order
+    threshold_noise *= np.sqrt(n_exp)
+    # print(threshold_noise)
     
-    mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask, inspect_hist) #threshold = threshold_noise, 
-    #mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask, inspect_hist) #threshold = threshold_noise, 
+    mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask, threshold_noise, inspect_hist) # We keep the threshold calculated from the noise above. If the gaussian fit is activated, then the value passed here will be replaced in the function 
 
     ### Apply mask ###
     masked_images = apply_mask_to_images(derotated_openCV_images, mask, 0)
-
-    print('before: ', len(masked_images))
-
+      
+    
     ### Remove images with stray light ###
+    
+    ##############################################################################
+    ## TO BE ACTIVATED ONCE THE DIMENSION ISSUE IN THE DATAFRAME HAS BEEN FIXED ##
+    ##############################################################################
 
-    straylight_boolean = remove_straylight(masked_images)
+    straylight_boolean = remove_straylight(masked_images) # straylight images flagges as FALSE, all others as TRUE
 
-    straylight_only = masked_images[~straylight_boolean]
-    images_wo_straylight = masked_images[straylight_boolean]
+    straylight_only = masked_images[~straylight_boolean] # returns straylight only images
+    images_wo_straylight = masked_images[straylight_boolean] # returns all images without strayligth
+    
+    # nb_of_removed_images_straylight = nb_images - len(masked_images) # nb_images is the original number of images
 
-    print('after: ', len(images_wo_straylight))
-
-    ### adjust number of images after straylight images are removed ###
-    #nb_images = len(images_wo_straylight)
-
+    # print(f"{nb_of_removed_images_straylight} images with straylight were removed.")
 
     ### Detect cosmics ###
     binary_images, nb_cosmics, images_contours = detect_cosmics(masked_images, threshold_cosmics) 
     
-    plt_show = True
-    plt.close('all')
-    if plt_show:
-        fig, ax = plt.subplots(ncols = 9, nrows=2, figsize=(35,8))
-        plt.subplots_adjust(left=0.05, right=0.99)
-        n = 39
-        median_image = np.nanmedian(derotated_openCV_images, axis=(0))
-        mean_image = np.nanmean(derotated_openCV_images, axis=(0))
-        
-        #ax[0,0].hist(np.log(images[n]+1).flatten(), bins = 100)
-        #ax[1,0].imshow(np.log(images[n]+1), origin = "lower")
-        #ax[0,0].set_title("Original subArray (log)")
-        ax[0,0].hist(images_orig[n].flatten(), bins = 100)
-        ax[1,0].imshow(images_orig[n], origin = "lower")
-        ax[0,0].set_title("Original subArray")
-        ax[0,0].set_ylim(0,100)
-        ax[0,1].hist(subtracted_median_images[n].flatten(), bins = 100)#len(np.unique(subtracted_median_images[n].flatten())))
-        ax[1,1].imshow(subtracted_median_images[n], origin = "lower")
-        ax[0,1].set_title("median value removed")
-        ax[0,1].set_ylim(0,100)
-        ax[0,2].hist(temporal_median_substracted_images[n].flatten(), bins = 100)#len(np.unique(temporal_median_substracted_images[n].flatten())))
-        ax[1,2].imshow(temporal_median_substracted_images[n], origin = "lower")
-        ax[0,2].set_title("median of pixels removed")
-        ax[0,2].set_ylim(0,100)
-        # ax[0,3].hist(derotated_openCV_images[n].flatten(), bins = len(np.unique(derotated_openCV_images[n].flatten())))
-        # ax[1,3].imshow(derotated_openCV_images[n], origin = "lower")
-        # ax[0,3].set_title("derotated converted image")
-        # ax[0,3].hist(np.log(derotated_openCV_images[n].flatten()+1), bins = len(np.unique(derotated_openCV_images[n].flatten())))
-        ax[1,3].imshow(np.log(derotated_openCV_images[n]+1), origin = "lower")
-        ax[0,3].set_ylim(0,500)
-        ax[0,3].set_title("log(derotated converted image)")
-        #ax[0,3].set_xscale('log')
-        ax[0,4].hist(median_image.flatten(), bins = len(np.unique(median_image.flatten())))
-        ax[0,4].axvline(threshold_noise, c = 'C2', linewidth = 2)
-        ax[1,4].imshow(median_image, origin = "lower",norm=colors.LogNorm())
-        ax[0,4].set_xlim(0,5*threshold_noise)
-        ax[0,4].set_title("median image of visit")
-        #ax[0,4].set_xscale('log')
-        # ax[0,5].hist(mean_image.flatten(), bins = len(np.unique(mean_image.flatten())))
-        # ax[0,5].axvline(threshold_noise, c = 'C2', linewidth = 2)
-        # ax[1,5].imshow(mean_image, origin = "lower")
-        # ax[0,5].set_ylim(0,100)
-        # ax[0,5].set_title("mean image of visit")
-        ax[1,5].imshow(mask, origin = "lower")
-        ax[0,5].set_ylim(0,100)
-        ax[0,5].set_title("designed mask")
-        # ax[0,6].hist(np.log(masked_images[n]+0.1).flatten(), bins = len(np.unique(masked_images[n].flatten())))
-        # ax[1,6].imshow(np.log(masked_images[n]+0.1), origin = "lower")
-        # ax[0,6].axvline(np.log(threshold_cosmics+0.1), c = 'C2', linewidth = 2)
-        # ax[0,6].set_title("log(masked image + 0.1)")
-        ax[0,6].hist(masked_images[n].flatten(), bins = 100)# len(np.unique(masked_images[n].flatten())))
-        ax[1,6].imshow(masked_images[n], origin = "lower")
-        ax[0,6].axvline(threshold_cosmics, c = 'C2', linewidth = 2)
-        ax[0,6].set_title("masked image")
-        ax[0,6].set_xlim(0,5*threshold_cosmics)
-        ax[0,6].set_ylim(0,100)
-        ax[0,7].hist(binary_images[n].flatten(), bins = len(np.unique(binary_images[n].flatten())))
-        ax[1,7].imshow(binary_images[n], origin = "lower")
-        ax[0,7].text(0.25,0.9,f"{int(nb_cosmics[n])} detected cosmics", weight = 'bold', transform=ax[0,7].transAxes)
-        ax[0,7].set_title("detected cosmics")
-        ax[0,8].hist(derotated_openCV_images[n].flatten()+1, bins = len(np.unique(derotated_openCV_images[n].flatten())))
-        #ax[0,8].plot(x, pdf)
-        ax[0,8].set_xlim(0, 50)
-        ax[0,8].set_ylim(0, 25000 )
-        fig.suptitle(f"{id}, {target_name}, nexp: {n_exp}, exptime:{exp_time}, Texptime: {total_exp_time} ")
-        plot_name = f'SAA_visit_{id}_frame_{n}.png' if visit_type == 'SAA' else f'visit_{id}_frame_{n}.png'
-        savePath = mainPath / "output_plots" / plot_name
-        plt.savefig(savePath, dpi = 600,format = 'png')
-    # enabling the line below will show plots at each iteration/visit
-    #plt.show()
-    
+       
+    if generate_plots:
+        n = 13
+        nb_cosmics_plot = nb_cosmics[n]
+        title_plot = f"{id}, {target_name}, nexp: {n_exp}, exptime:{exp_time}, Texptime: {total_exp_time} "
+        name_plot = f"SAA_visit_{id}_frame_{n}.png" if visit_type == 'SAA' else f"visit_{id}_frame_{n}.png"
+        genreate_diagnostic_plots(derotated_openCV_images, images, subtracted_median_images, temporal_median_substracted_images, threshold_noise, threshold_cosmics, mask, masked_images, binary_images, n, nb_cosmics_plot, title_plot, name_plot, show_plot = False)
     
     # Cosmic per cm2
-    nb_masked_pixels = np.sum(edges_circular_mask.flatten()) + np.sum(mask.flatten()) # number of pixels that are masked (edged + mask)
+    nb_masked_pixels = np.sum(edges_circular_mask | mask) # number of pixels that are masked (edged + mask)
     fraction_remaining_pixels = (height_images*width_images) - nb_masked_pixels
     pixel_size = 13e-6 # m
     cm2_analysed = fraction_remaining_pixels*((pixel_size*1e2)**2) # cm2
@@ -193,8 +132,6 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     latitude = [metadata['LATITUDE'] for metadata in metadata_images]
     longitude = [metadata['LONGITUDE'] for metadata in metadata_images]
 
-    latitude = np.array(latitude)
-    longitude = np.array(longitude)
 
     data = pd.DataFrame(data =    {
                                 'visit_ID': np.full(nb_images, id),
@@ -203,7 +140,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 'derotated_images': flattened_derotated_images,
                                 'masked_images': flattened_masked_images, 
                                 'binary_images': flattened_binary_images,
-                                'straylight_boolean': straylight_boolean, 
+                                'straylight_boolean': straylight_boolean,  
                                 #'mask': flattened_mask,
                                 'JD': time_images_utc_jd,
                                 'time': time_images_utc,
@@ -231,7 +168,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     
     return data
 
-    # elif type_of_visit == 'imagette':
+ # elif type_of_visit == 'imagette':
         
     #     data = pd.DataFrame(data =    {
     #                                 'visit_ID': np.full(nb_images, id),
@@ -290,71 +227,55 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
 ###### On the compute node #######
 ##################################
 
-"""
-Running on a local machine
-"""
+directory_path = MAIN_PATH / "test_visits"
 
-# Path of the folder in which all the code + visits are located
-mainPath = pathlib.Path("/home/lui/Documents/thesis/CheopsCosmics/Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0")
-
-# Science or SAA visits. For the SAA, we use the Attitude file to find the LON/LAT position, as the Sci_COR_Lightcurve don't always exist when the DRP fails to process the SAA visits.
-visit_type = 'science'
-#visit_type = 'SAA'
-
-if visit_type == 'SAA':
-    directory_path = mainPath / "SAA_visits"
-else:
-    directory_path = mainPath / "Science_visits"
-
-substring = 'RAW_SubArray'
-image_files_list = get_files_with_substring(directory_path, substring)
-
-if visit_type == 'SAA':
-    substring = 'Attitude'
-else: 
-    substring = 'COR_Lightcurve-DEFAULT'
-roll_angle_files_list = get_files_with_substring(directory_path, substring)
-
+image_files_list, roll_angle_files_list = get_files_with_substring(directory_path)
 
 ##################################
 ###### On the compute node #######
 ##################################
 
-"""
-This part of the script will be used when running on the compute node
-"""
-
-# visits_dir         = Path("/projects/astro/cheops/processing/chpscn02/opt/monitor4cheops/Operations/repository/visit/")
-# visits_dir_reporoc = Path('/projects/astro/cheops/chpscn00data/workarea/chpscn03/opt/monitor4cheops/reprocessing/2023-03-14_reprocessing02/repository/visit/') # reprocess data befre 7th June 2023
+# Path of the folder in which all the code + visits are located
+# mainPath = Path.cwd()
+# visits_list = database_query(start,end)
 
 # # Range of time to gather visits
-# start = pd.Timestamp('2021-10-21 03:48:53.516959+0000', tz='UTC') # mission start
+# start = pd.Timestamp('2024-06-03 00:00:00', tz='UTC') # mission start
 # #end   = start + timedelta(weeks=10)
 # end   = pd.Timestamp(datetime.now())
 
-# visits_list = database_query(start,end)
+# visits_list = database_query(start,end,copy = True)
 
 # image_files_list = []
 # roll_angle_files_list = []
 
 # # Get paths for all visits of interest
 # for visit in visits_list:
+#     if visit == "PR340102_TG000101": # Exclude specific visits
+#         continue 
 #     visit_dir = visits_dir / visit[:4] / visit
 #     subarray_found = False
-#     lc_found = False
+#     roll_angle_found = False
 #     for filename in visit_dir.iterdir():
-#         if subarray_found and lc_found: # to speed up the process slightly
+#         if subarray_found and roll_angle_found: # to speed up the process slightly
 #             break
-#         elif fnmatch.fnmatch(filename, "SCI_RAW_SubArray"):
+#         elif "SCI_RAW_SubArray" in filename.stem:
 #             subarray_path = visit_dir / filename
-#             image_files_list.append(subarray_path)
 #             subarray_found = True
-#         elif fnmatch.fnmatch(filename, "COR_Lightcurve-DEFAULT"):
-#             lc_path = visit_dir / filename
-#             roll_angle_files_list.append(lc_path)
-#             lc_found = True
+#         elif ("COR_Lightcurve-DEFAULT" in filename.stem) and (visit.split('_')[0] != "PR340102"):
+#             roll_angle_path = visit_dir / filename
+#             roll_angle_found = True
+#         elif ("Attitude" in filename.stem) and (visit.split('_')[0] == "PR340102"):
+#             roll_angle_path = visit_dir / filename
+#             roll_angle_found = True
 #         else:
 #             continue
+        
+#     if subarray_found and roll_angle_found: # Only use visit that have both these files
+#         image_files_list.append(subarray_path)
+#         roll_angle_files_list.append(roll_angle_path)
+#     else:
+#         continue
 
 ##################################
 ##################################
@@ -365,36 +286,44 @@ image_files_list.sort(reverse = False)
 roll_angle_files_list.sort(reverse = False)
 
 # Thresholds
-if visit_type == 'SAA':
-    threshold_noise = 6.5
-else:
-    threshold_noise = 10 # This is now scaled by sqrt(nexp) in the main loop. TBD: replace with a gaussian fit of the noise
+threshold_noise_SAA = 6.5
+threshold_noise_science = 10 # This is now scaled by sqrt(nexp) in the main loop. TBD: replace with a gaussian fit of the noise
 threshold_cosmics = 250
+
+generate_plots = True
 
 # For a single visit
 '''
 visit_idx = 5
-all_data, restituted_orbit = main_loop(images[visit_idx], Attitudes[visit_idx], threshold_mask, threshold_cosmics)
+all_data, restituted_orbit = main_loop(image_files_list[visit_idx], roll_angle_files_list[visit_idx],  threshold_noise, threshold_cosmics, visit_type, generate_plots)
 '''
 
 # For all visits
 all_data = pd.DataFrame()
 restituted_orbit = pd.DataFrame()
 for i in range(len(image_files_list)):
-    visit = image_files_list[i].split('/')[-1][3:20] 
+    visit = image_files_list[i].stem[3:20]
+    if visit.split('_')[0] == "PR340102":
+        visit_type = "SAA"
+        threshold_noise = threshold_noise_SAA
+    else:
+        visit_type = "science"
+        threshold_noise = threshold_noise_science
     # Check the consistency between files: 
-    if not (image_files_list[i].split('/')[-1].split('_')[:3] == roll_angle_files_list[i].split('/')[-1].split('_')[:3]):
+    if not (image_files_list[i].stem.split('_')[:3] == roll_angle_files_list[i].stem.split('_')[:3]):
         print("SubArray don't match the SCI_COR_lightcurve/Attitude file !!!")
         pass
     print(f"########################")
     print(f"Processing visit {i+1} of {len(image_files_list)} ({visit})...")
-    df = main_loop(image_files_list[i], roll_angle_files_list[i], threshold_noise, threshold_cosmics, visit_type)
+    df = main_loop(image_files_list[i], roll_angle_files_list[i], threshold_noise, threshold_cosmics, visit_type, generate_plots)
     
     all_data = pd.concat([all_data, df], ignore_index=False)
 
 all_data = all_data.sort_index()
 
-file_name = 'all_data_' + visit_type +'.pkl'
-save_path = mainPath / file_name
+
+
+file_name = 'all_data.pkl'
+save_path = MAIN_PATH / file_name
 
 all_data.to_pickle(save_path, compression='infer', protocol=5, storage_options=None)
