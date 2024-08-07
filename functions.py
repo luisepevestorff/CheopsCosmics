@@ -201,7 +201,7 @@ def apply_mask_to_images(images, mask, value):
         
     return masked_images  
 
-def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science, enlarge_mask = True, inspect_threshold = False, inspect_mask = False, threshold = 0):
+def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science, enlarge_mask = True, inspect_threshold = False, threshold = 0):
     
     image_for_mask = np.nanmedian(derotated_openCV_images, axis=(0)) # median
     
@@ -296,10 +296,12 @@ def detect_cosmics(masked_images, threshold):
     # Initialize the counter of cosmics per image
     nb_cosmics = np.zeros(np.shape(masked_images)[0])
     images_contours = [] # List of contours for all images (size of nb of images)
-
+    nb_pixels_largest_cosmics = []
+    
     # 1. Find the countours
     # 2. Go through all contours in images, and remove the ones that are only one pixels
     # 3. Store the remaining in the images_contours
+    # 4. Get the number of pixels in the largest cosmic
     for i,image in enumerate(binary_images):
         curr_image_contours, _ = cv2.findContours(image.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
         indices_of_1_pixel_contours = []
@@ -312,8 +314,25 @@ def detect_cosmics(masked_images, threshold):
             del contours_list[index]
         nb_cosmics[i] = len(contours_list)
         images_contours.append(contours_list)
-        
-    return binary_images, nb_cosmics, images_contours
+    
+        nb_pixels_largest_cosmics.append(find_largest_cosmic(contours_list))
+      
+    return binary_images, nb_cosmics, images_contours, nb_pixels_largest_cosmics
+
+def find_largest_cosmic(pix_cosmics):
+    """
+    Use to identify the cosmic ray with the largest number of pixel. With more than a 100 we are very probably looking at a satelitte trail or straylight.
+    """
+    
+    if len(pix_cosmics) > 0:
+        nb_pixels_cosmic = []
+        for cosmic in pix_cosmics:
+            nb_pixels_cosmic.append(np.shape(cosmic)[0])
+            
+        return int(np.max(nb_pixels_cosmic))
+    else:
+        return 0
+
 
 def reshape_flatten_images(images_type, images):
     
@@ -389,6 +408,9 @@ def create_circular_mask(size, radius):
 
 def genreate_diagnostic_plots(derotated_openCV_images, images, subtracted_median_images, temporal_median_substracted_images, threshold_noise, threshold_cosmics, mask, masked_images, binary_images, n, nb_cosmics, title, plot_name, show_plot):
     
+    output_plots = MAIN_PATH / "output_plots"
+    output_plots.mkdir(parents=True, exist_ok=True)
+    
     plt.close('all')
     fig, ax = plt.subplots(ncols = 8, nrows=2, figsize=(35,8))
     plt.subplots_adjust(left=0.05, right=0.99)
@@ -447,8 +469,7 @@ def genreate_diagnostic_plots(derotated_openCV_images, images, subtracted_median
     ax[0,7].text(0.25,0.9,f"{int(nb_cosmics)} detected cosmics", weight = 'bold', transform=ax[0,7].transAxes)
     ax[0,7].set_title("detected cosmics")
     fig.suptitle(title)
-    savePath = MAIN_PATH / "output_plots" / plot_name
-    plt.savefig(savePath, dpi = 600,format = 'png')
+    plt.savefig(output_plots/plot_name, dpi = 600,format = 'png')
         
     if show_plot:
         plt.show()
@@ -545,11 +566,44 @@ def find_threshold(image, inspect_hist=True):
 
     return m_fit, t_fit, b_fit, threshold, popt, x
 
+    ### Hyperbolic ###
+
+    # max_index = np.argmax(y)
+
+    # a_initial = 1
+    # p_initial = 5
+    # #-(x[max_index])
+    # q_initial = 0
+
+    # popt,pcov=curve_fit(hyperbolic,x,y,p0=[a_initial, p_initial, q_initial])
+
+    # a_fit = popt[0]
+    # p_fit = popt[1]
+    # q_fit = popt[2]
+
+    # threshold = 50 #arbitrary for testing purposes
+
+    # if inspect_hist:
+    #     x_hist = x
+    #     params = popt
+    #     fit = exponential(x_hist, *params)
+
+    #     fig,ax = plt.subplots()
+    #     ax.hist(flatten_images, bins = 10000)
+    #     ax.plot(x_hist, fit, 'r', label='Exponential Fit')
+    #     plt.title('Histogram inspection')
+    #     plt.show()
+    
+    # return a_fit, p_fit, q_fit, threshold, popt, x
+
 def gaussian(x,amp,mu,sigma):
     return amp*np.exp(-(x-mu)**2/2*sigma**2)
 
 def exponential(x, m, t, b):
     return m*np.exp(-(t*x)+b)
+
+def hyperbolic(x, a, p, q):
+    return (a/(x+p))+q
 
 def remove_straylight(masked_images):
     masked_array = masked_images.copy()
@@ -567,7 +621,7 @@ def remove_straylight(masked_images):
 
     background_threshold = median_new + 10 #arbitrary number for now -> see what will filter stray light the best
 
-    #create binary array to flag straylight images -> straylight images are flagged as FALSE
-    straylight_boolean_array = (median_per_image < background_threshold)
+    #create binary array to flag straylight images -> straylight images are flagged as 0
+    straylight_binary_array = (median_per_image > background_threshold)
 
-    return straylight_boolean_array
+    return straylight_binary_array

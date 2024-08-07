@@ -43,7 +43,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     ra = header_images['RA_TARG']
     dec = header_images['DEC_TARG']
     
-    print(f"{target_name} (OR {id}): {visit_start}, {np.shape(images_orig)[0]} images.")
+    print(f"{target_name} (OR {id}): {visit_start}, {np.shape(images_orig)[0]} images, stacking order = {n_exp}")
     
     size = np.shape(images_orig[0])[0]
     radius = np.shape(images_orig[0])[0]/2
@@ -78,7 +78,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     threshold_noise *= np.sqrt(n_exp)
     # print(threshold_noise)
     
-    mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, inspect_mask, threshold_noise, inspect_hist) # We keep the threshold calculated from the noise above. If the gaussian fit is activated, then the value passed here will be replaced in the function 
+    mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, threshold_noise) # We keep the threshold calculated from the noise above. If the gaussian fit is activated, then the value passed here will be replaced in the function 
 
     ### Apply mask ###
     masked_images = apply_mask_to_images(derotated_openCV_images, mask, 0)
@@ -96,7 +96,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     # print(f"{nb_of_removed_images_straylight} images with straylight were removed.")
 
     ### Detect cosmics ###
-    binary_images, nb_cosmics, images_contours = detect_cosmics(masked_images, threshold_cosmics) 
+    binary_images, nb_cosmics, images_contours, nb_pixels_largest_cosmics = detect_cosmics(masked_images, threshold_cosmics) 
            
     if generate_plots:
         n = 13
@@ -114,11 +114,18 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     
     print(f'{nb_masked_pixels} masked pixels')
     
-    flattened_images           = [image.flatten() for image in images_orig]
-    flattened_derotated_images = [image.flatten() for image in derotated_openCV_images]
-    flattened_masked_images    = [image.flatten() for image in masked_images]
-    flattened_binary_images    = [image.flatten() for image in binary_images]
+    # Quantize images to take less space
     
+    
+    flattened_images           = [image.flatten().astype('uint8') for image in images_orig]
+    flattened_derotated_images = [image.flatten().astype('uint8') for image in derotated_openCV_images]
+    flattened_masked_images    = [image.flatten().astype('uint8') for image in masked_images]
+    flattened_binary_images    = [image.flatten().astype('uint8') for image in binary_images]
+    
+    
+    threshold_cosmics = threshold_cosmics*255/(65535*n_exp)
+ 
+   
     flattened_mask = []
     for i in range(len(images)):
         flattened_mask.append(mask.flatten())
@@ -130,15 +137,15 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     data = pd.DataFrame(data =    {
                                 'visit_ID': np.full(nb_images, id),
                                 'img_counter': np.arange(nb_images),
-                                #'raw_images': flattened_images,
+                                # 'raw_images': flattened_images,
                                 # 'derotated_images': flattened_derotated_images,
-                                # 'masked_images': flattened_masked_images, 
-                                # 'binary_images': flattened_binary_images,
-                                'straylight_boolean': straylight_boolean,  
+                                'masked_images': flattened_masked_images, 
+                                #'binary_images': flattened_binary_images,
                                 #'mask': flattened_mask,
                                 'JD': time_images_utc_jd,
                                 'time': time_images_utc,
                                 'nb_cosmics' : nb_cosmics.astype(int),
+                                'largest_cosmics': nb_pixels_largest_cosmics,
                                 'density_cosmics' : density_cosmics,
                                 'pix_cosmics': images_contours,
                                 'im_height': np.full(nb_images, height_images),
@@ -154,7 +161,8 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 'ra': np.full(nb_images, ra),
                                 'dec': np.full(nb_images, dec),
                                 'LATITUDE': latitude,
-                                'LONGITUDE': longitude
+                                'LONGITUDE': longitude,
+                                'straylight_boolean': straylight_boolean
                                 }
     )
     
@@ -250,7 +258,6 @@ if __name__ == "__main__":
     # For all visits
     all_data = pd.DataFrame()
     restituted_orbit = pd.DataFrame()
-    print(len(image_files_list))
     for i in range(len(image_files_list)):
         visit = image_files_list[i].stem[3:20]
         if visit.split('_')[0] == "PR340102":
