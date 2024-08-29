@@ -22,7 +22,8 @@ def get_files_with_substring(directory):
         elif ('Attitude' in filename.stem) or ('COR_Lightcurve-DEFAULT' in filename.stem):
             roll_angle_files_list.append(filename)
         else:
-            raise NameError(f"{filename} is an unexpected file that does not contain 'RAW_SubArray', 'Attitude', or 'COR_Lightcurve-DEFAULT.")
+            continue
+            #raise NameError(f"{filename} is an unexpected file that does not contain 'RAW_SubArray', 'Attitude', or 'COR_Lightcurve-DEFAULT.")
     return image_files_list, roll_angle_files_list
 
 def read_images(file):

@@ -148,6 +148,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 'largest_cosmics': nb_pixels_largest_cosmics,
                                 'density_cosmics' : density_cosmics,
                                 'pix_cosmics': images_contours,
+                                'nb_masked_pixels': nb_masked_pixels,
                                 'im_height': np.full(nb_images, height_images),
                                 'im_width': np.full(nb_images, width_images),
                                 'threshold_cosmics': np.full(nb_images, threshold_cosmics),

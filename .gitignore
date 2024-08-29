@@ -192,6 +192,9 @@ CHEOPS-UGE-SOC-DD-002-i1.21_data_products_definition_document.pdf
 #Ignore output_plots folder
 output_plots
 
+#Ignore pickle files
+*.pkl
+
 
 
 
