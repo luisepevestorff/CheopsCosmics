@@ -277,6 +277,8 @@ if __name__ == "__main__":
         all_data = pd.concat([all_data, df], ignore_index=False)
 
     all_data = all_data.sort_index()
-    file_name = 'all_data.pkl'
+    start_data = all_data.iloc[0].time.strftime(format = "%Y_%m_%d")
+    end_data = all_data.iloc[-1].time.strftime(format = "%Y_%m_%d")
+    file_name = "data_" + start_data + "_to_" + end_data + ".pkl"
     save_path = MAIN_PATH / file_name
     all_data.to_pickle(save_path, compression='infer', protocol=5, storage_options=None)
