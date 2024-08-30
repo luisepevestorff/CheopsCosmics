@@ -8,9 +8,13 @@ import socket
 # # Main loop of entire process
    
 MAIN_PATH = Path.cwd()
+MIN_IMAGES = 10
+MAX_IMAGES = 3000
 
 def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_of_visit, generate_plots):
-
+    
+    visit_skipped = 0
+    
     ### Get images and metadata ###
     images_orig, header_images, metadata_images, nb_images, height_images, width_images = read_images(Images)
     
@@ -18,9 +22,15 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     #if Images == mainPath / "CH_PR149002_TG001301_TU2024-05-27T12-03-30_SCI_RAW_SubArray_V0300.fits":
     #    print('s')
     
-    if nb_images < 10:
-        print("This visit has less than 10 images, skipping...")
-        return pd.DataFrame()
+    if nb_images < MIN_IMAGES:
+        visit_skipped = 1
+        print(f"This visit has less than {MIN_IMAGES} images, skipping...")
+        return pd.DataFrame(), visit_skipped
+    
+    if nb_images > MAX_IMAGES:
+        visit_skipped = 2
+        print(f"This visit has more than {MAX_IMAGES} images, skipping...")
+        return pd.DataFrame(), visit_skipped
     
     # visit params
     id =  str(header_images['PROGTYPE']) + '_' + str(header_images['PROG_ID']) + '_' + str(header_images['REQ_ID']) + '_' + str(header_images['VISITCTR'])
@@ -169,7 +179,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     
     data.set_index('JD',drop = True, inplace = True) # set index to JD
     
-    return data
+    return data, visit_skipped
 
  # elif type_of_visit == 'imagette':
         
@@ -257,10 +267,11 @@ if __name__ == "__main__":
     '''
 
     # For all visits
+    visit_skipped = []
     all_data = pd.DataFrame()
     restituted_orbit = pd.DataFrame()
     for i in range(len(image_files_list)):
-        visit = image_files_list[i].stem[3:20]
+        visit = image_files_list[i].stem[3:20]        
         if visit.split('_')[0] == "PR340102":
             visit_type = "SAA"
             threshold_noise = threshold_noise_SAA
@@ -273,8 +284,17 @@ if __name__ == "__main__":
             pass
         print(f"########################")
         print(f"Processing visit {i+1} of {len(image_files_list)} ({visit})...")
-        df = main_loop(image_files_list[i], roll_angle_files_list[i], threshold_noise, threshold_cosmics, visit_type, generate_plots)
+        df, skipped = main_loop(image_files_list[i], roll_angle_files_list[i], threshold_noise, threshold_cosmics, visit_type, generate_plots)
         
+        if skipped == 1:
+            print(f"{visit} has less than {MIN_IMAGES}, skipping...")
+            visit_skipped.append(visit)
+        elif skipped == 2:
+            print(f"{visit} has more than {MAX_IMAGES}, skipping...")
+            visit_skipped.append(visit)
+        else:
+            pass
+            
         all_data = pd.concat([all_data, df], ignore_index=False)
 
     all_data = all_data.sort_index()
@@ -283,3 +303,7 @@ if __name__ == "__main__":
     file_name = "data_" + start_data + "_to_" + end_data + ".pkl"
     save_path = MAIN_PATH / file_name
     all_data.to_pickle(save_path, compression='infer', protocol=5, storage_options=None)
+    
+    print("The following visits have been skipped as they wither had to few or too many images:")
+    for v_skipped in visit_skipped:
+        print(visit_skipped)

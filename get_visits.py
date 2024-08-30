@@ -143,12 +143,9 @@ if __name__ == "__main__":
     nb_visits = 0
     start_proc = False
     for visit in visits_list:
-        # if visit == "PR100036_TG001501":
-        #     start_proc = True
-        # if start_proc == False:
-        #     continue
-        if ("PR100036_TG0015" in visit) or ("PR100036_TG0014" in visit): # Exclude specific visits
-            continue 
+        # Don't consider M&C except SAA visits:
+        if ("PR3" in visit) and (visit.split('_')[0] != "PR340102"):
+            continue
         visit_dir = visits_dir_reproc / visit[:4] / visit
         if not visit_dir.is_dir(): # Data more recent than 07 June 2023
             visit_dir = visits_dir / visit[:4] / visit
