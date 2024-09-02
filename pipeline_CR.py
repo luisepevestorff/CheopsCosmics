@@ -9,7 +9,7 @@ import socket
    
 MAIN_PATH = Path.cwd()
 MIN_IMAGES = 10
-MAX_IMAGES = 3000
+MAX_IMAGES = 2500
 
 def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_of_visit, generate_plots):
     
