@@ -117,10 +117,10 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     # Quantize images to take less space
     
     
-    flattened_images           = [image.flatten().astype('uint8') for image in images_orig]
-    flattened_derotated_images = [image.flatten().astype('uint8') for image in derotated_openCV_images]
-    flattened_masked_images    = [image.flatten().astype('uint8') for image in masked_images]
-    flattened_binary_images    = [image.flatten().astype('uint8') for image in binary_images]
+    # flattened_images           = [image.flatten().astype('uint8') for image in images_orig]
+    # flattened_derotated_images = [image.flatten().astype('uint8') for image in derotated_openCV_images]
+    # flattened_masked_images    = [image.flatten().astype('uint8') for image in masked_images]
+    # flattened_binary_images    = [image.flatten().astype('uint8') for image in binary_images]
     
     
     threshold_cosmics = threshold_cosmics*255/(65535*n_exp)
@@ -129,9 +129,9 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     percentage_cosmics_rounded = round(percentage_cosmic_pixels, 3)
     print(f'{percentage_cosmics_rounded}% pixels contain cosmics')
 
-    flattened_mask = []
-    for i in range(len(images)):
-        flattened_mask.append(mask.flatten())
+    # flattened_mask = []
+    # for i in range(len(images)):
+    #     flattened_mask.append(mask.flatten())
         
     latitude = [metadata['LATITUDE'] for metadata in metadata_images]
     longitude = [metadata['LONGITUDE'] for metadata in metadata_images]
@@ -139,9 +139,9 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     data = pd.DataFrame(data =    {
                                 'visit_ID': np.full(nb_images, id),
                                 'img_counter': np.arange(nb_images),
-                                # 'raw_images': flattened_images,
-                                # 'derotated_images': flattened_derotated_images,
-                                'masked_images': flattened_masked_images, 
+                                #'raw_images': flattened_images,
+                                #'derotated_images': flattened_derotated_images,
+                                #'masked_images': flattened_masked_images, 
                                 #'binary_images': flattened_binary_images,
                                 #'mask': flattened_mask,
                                 'JD': time_images_utc_jd,
