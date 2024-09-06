@@ -626,3 +626,13 @@ def remove_straylight(masked_images):
     straylight_binary_array = (median_per_image > background_threshold)
 
     return straylight_binary_array
+
+def cosmic_fraction(nb_remaining_pixels, contours):
+    nb_cosmic_pixels = 0
+    for i in range(len(contours)):
+        for j in range(len(contours[i])):
+            nb_cosmic_pixels += len(contours[i][j])
+
+    pixel_fraction = nb_cosmic_pixels / nb_remaining_pixels
+    
+    return pixel_fraction
