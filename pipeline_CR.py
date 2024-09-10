@@ -126,8 +126,8 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     threshold_cosmics = threshold_cosmics*255/(65535*n_exp)
     
     percentage_cosmic_pixels = cosmic_fraction(fraction_remaining_pixels, images_contours)*100
-    percentage_cosmics_rounded = round(percentage_cosmic_pixels, 3)
-    print(f'{percentage_cosmics_rounded}% pixels contain cosmics')
+    percentage_cosmics_rounded = np.round(percentage_cosmic_pixels, 3)
+    print(f'the most contaminated image contains {np.round(np.max(percentage_cosmics_rounded),1)}%  of pixels affected by cosmics')
 
     # flattened_mask = []
     # for i in range(len(images)):
@@ -245,6 +245,8 @@ if __name__ == "__main__":
     else: # on local machine
         visits_folder = MAIN_PATH / "test_visits"
         image_files_list, roll_angle_files_list = get_files_with_substring(visits_folder)
+        image_files_list = np.sort(image_files_list)
+        roll_angle_files_list = np.sort(roll_angle_files_list)
 
     # Thresholds
     threshold_noise_SAA = 6.5

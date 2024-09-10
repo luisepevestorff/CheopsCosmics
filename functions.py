@@ -628,11 +628,20 @@ def remove_straylight(masked_images):
     return straylight_binary_array
 
 def cosmic_fraction(nb_remaining_pixels, contours):
-    nb_cosmic_pixels = 0
-    for i in range(len(contours)):
-        for j in range(len(contours[i])):
-            nb_cosmic_pixels += len(contours[i][j])
-
-    pixel_fraction = nb_cosmic_pixels / nb_remaining_pixels
     
-    return pixel_fraction
+    # nb_cosmic_pixels = np.array([])
+    # nb_cosmic_pixels = 0
+    # for i in range(len(contours)):
+    #     for j in range(len(contours[i])):
+    #         nb_cosmic_pixels += len(contours[i][j])
+            
+    nb_cosmic_pixels = np.array([])
+    for i in range(len(contours)): # iterate through images
+        nb_cosmic_pixels_current_image = 0 # nb pixels affected by cosmic in the current image
+        for j in range(len(contours[i])): # iterate through each CR identified in the current image
+            nb_cosmic_pixels_current_image += len(contours[i][j]) # add the nb of pixels in a given CR
+        pixel_fraction = nb_cosmic_pixels_current_image / nb_remaining_pixels
+        nb_cosmic_pixels = np.append(nb_cosmic_pixels, pixel_fraction)
+
+    # return pixel_fraction
+    return nb_cosmic_pixels
