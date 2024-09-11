@@ -8,9 +8,13 @@ import socket
 # # Main loop of entire process
    
 MAIN_PATH = Path.cwd()
+MIN_IMAGES = 10
+MAX_IMAGES = 3000
 
 def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_of_visit, generate_plots):
-
+    
+    visit_skipped = 0
+    
     ### Get images and metadata ###
     images_orig, header_images, metadata_images, nb_images, height_images, width_images = read_images(Images)
     
@@ -18,9 +22,15 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     #if Images == mainPath / "CH_PR149002_TG001301_TU2024-05-27T12-03-30_SCI_RAW_SubArray_V0300.fits":
     #    print('s')
     
-    if nb_images < 10:
-        print("This visit has less than 10 images, skipping...")
-        return pd.DataFrame()
+    if nb_images < MIN_IMAGES:
+        visit_skipped = 1
+        print(f"This visit has less than {MIN_IMAGES} images, skipping...")
+        return pd.DataFrame(), visit_skipped
+    
+    if nb_images > MAX_IMAGES:
+        visit_skipped = 2
+        print(f"This visit has more than {MAX_IMAGES} images, skipping...")
+        return pd.DataFrame(), visit_skipped
     
     # visit params
     id =  str(header_images['PROGTYPE']) + '_' + str(header_images['PROG_ID']) + '_' + str(header_images['REQ_ID']) + '_' + str(header_images['VISITCTR'])
@@ -107,6 +117,10 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     
     # Cosmic per cm2
     nb_masked_pixels = np.sum(edges_circular_mask | mask) # number of pixels that are masked (edged + mask)
+    if nb_masked_pixels == 40000:
+        visit_skipped = 3
+        print(f"All pixels are masked... bad images, skipping...")
+        return pd.DataFrame(), visit_skipped
     fraction_remaining_pixels = (height_images*width_images) - nb_masked_pixels
     pixel_size = 13e-6 # m
     cm2_analysed = fraction_remaining_pixels*((pixel_size*1e2)**2) # cm2
@@ -115,8 +129,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     print(f'{nb_masked_pixels} masked pixels')
     
     # Quantize images to take less space
-    
-    
+
     # flattened_images           = [image.flatten().astype('uint8') for image in images_orig]
     # flattened_derotated_images = [image.flatten().astype('uint8') for image in derotated_openCV_images]
     # flattened_masked_images    = [image.flatten().astype('uint8') for image in masked_images]
@@ -136,14 +149,15 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     latitude = [metadata['LATITUDE'] for metadata in metadata_images]
     longitude = [metadata['LONGITUDE'] for metadata in metadata_images]
 
+
     data = pd.DataFrame(data =    {
                                 'visit_ID': np.full(nb_images, id),
                                 'img_counter': np.arange(nb_images),
-                                #'raw_images': flattened_images,
-                                #'derotated_images': flattened_derotated_images,
-                                #'masked_images': flattened_masked_images, 
-                                #'binary_images': flattened_binary_images,
-                                #'mask': flattened_mask,
+                                # 'raw_images': flattened_images,
+                                # 'derotated_images': flattened_derotated_images,
+                                # 'masked_images': flattened_masked_images, 
+                                # 'binary_images': flattened_binary_images,
+                                # 'mask': flattened_mask,
                                 'JD': time_images_utc_jd,
                                 'time': time_images_utc,
                                 'nb_cosmics' : nb_cosmics.astype(int),
@@ -172,7 +186,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     
     data.set_index('JD',drop = True, inplace = True) # set index to JD
     
-    return data
+    return data, visit_skipped
 
  # elif type_of_visit == 'imagette':
         
@@ -253,7 +267,7 @@ if __name__ == "__main__":
     threshold_noise_science = 10 # This is now scaled by sqrt(nexp) in the main loop. TBD: replace with a gaussian fit of the noise
     threshold_cosmics = 250
 
-    generate_plots = False
+    generate_plots = True
 
     # For a single visit
     '''
@@ -262,10 +276,12 @@ if __name__ == "__main__":
     '''
 
     # For all visits
+    visit_skipped = []
+    skipped_val = []
     all_data = pd.DataFrame()
     restituted_orbit = pd.DataFrame()
     for i in range(len(image_files_list)):
-        visit = image_files_list[i].stem[3:20]
+        visit = image_files_list[i].stem[3:20]        
         if visit.split('_')[0] == "PR340102":
             visit_type = "SAA"
             threshold_noise = threshold_noise_SAA
@@ -278,8 +294,14 @@ if __name__ == "__main__":
             pass
         print(f"########################")
         print(f"Processing visit {i+1} of {len(image_files_list)} ({visit})...")
-        df = main_loop(image_files_list[i], roll_angle_files_list[i], threshold_noise, threshold_cosmics, visit_type, generate_plots)
-        
+        df, skipped = main_loop(image_files_list[i], roll_angle_files_list[i], threshold_noise, threshold_cosmics, visit_type, generate_plots)
+
+        if skipped != 0:
+            skipped_val.append(skipped)
+            visit_skipped.append(visit)
+        else:
+            pass
+            
         all_data = pd.concat([all_data, df], ignore_index=False)
 
     all_data = all_data.sort_index()
@@ -288,3 +310,18 @@ if __name__ == "__main__":
     file_name = "data_" + start_data + "_to_" + end_data + ".pkl"
     save_path = MAIN_PATH / file_name
     all_data.to_pickle(save_path, compression='infer', protocol=5, storage_options=None)
+    
+    
+    if len(visit_skipped) > 0:
+        print("The following visits have been skipped as they  had to few images:")
+    else:
+        print("No skipped visits")
+    
+    for v_skipped in visit_skipped:
+        if  skipped_val == 1:
+            reason = f": contains less than {MIN_IMAGES} images."
+        elif  skipped_val == 2:
+            reason = f": contains more than {MAX_IMAGES} images"
+        elif  skipped_val == 3:
+            reason = f": Has all pixels masked, probably non standard. Bad visit for CR identification."
+        print(v_skipped,reason)
