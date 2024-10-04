@@ -196,7 +196,13 @@ output_plots
 #Ignore pickle files
 *.pkl
 *.png
+merge_pkls.ipynb
 
+# other files
+plot.ipynb
+analyse_plot_CR_alexis_double.ipynb
+# old SAA mask
+CH_TU2020-03-11T00-00-00_EXT_APP_SAAMap-700km_V0102.fits
 
 
 

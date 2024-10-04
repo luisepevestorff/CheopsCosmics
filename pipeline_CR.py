@@ -10,6 +10,7 @@ import socket
 MAIN_PATH = Path.cwd()
 MIN_IMAGES = 10
 MAX_IMAGES = 3000
+PIXEL_SIZE = 13e-6
 
 def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_of_visit, generate_plots):
     
@@ -88,15 +89,14 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     threshold_noise *= np.sqrt(n_exp)
     # print(threshold_noise)
     
-    mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, threshold_noise) # We keep the threshold calculated from the noise above. If the gaussian fit is activated, then the value passed here will be replaced in the function 
+    contaminant_mask, _ = create_contaminant_mask(derotated_openCV_images, edges_circular_mask, type_of_visit, enlarge_mask, inspect_threshold, threshold_noise) # We keep the threshold calculated from the noise above. If the gaussian fit is activated, then the value passed here will be replaced in the function 
 
     ### Apply mask ###
-    masked_images = apply_mask_to_images(derotated_openCV_images, mask, 0)
+    masked_images = apply_mask_to_images(derotated_openCV_images, contaminant_mask, 0)
       
-    
-    ### Remove images with stray light ###
+    ### Remove images with stray light ### New way of doing it below, taking into account the pixels affected by cosmics
 
-    straylight_boolean = remove_straylight(masked_images) # straylight images flagges as FALSE, all others as TRUE
+    # straylight_boolean = remove_straylight(masked_images) # straylight images flagges as FALSE, all others as TRUE
 
     # straylight_only = masked_images[~straylight_boolean] # returns straylight only images
     # images_wo_straylight = masked_images[straylight_boolean] # returns all images without strayligth
@@ -104,47 +104,57 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     # nb_of_removed_images_straylight = nb_images - len(masked_images) # nb_images is the original number of images
 
     # print(f"{nb_of_removed_images_straylight} images with straylight were removed.")
-
+    
     ### Detect cosmics ###
-    binary_images, nb_cosmics, images_contours, nb_pixels_largest_cosmics = detect_cosmics(masked_images, threshold_cosmics) 
+    binary_images, loc_cosmics, info_cosmics = detect_cosmics(masked_images, threshold_cosmics) 
+    
+    
+    # Get some useful quantities 
+
+    nb_masked_pixels = np.sum(edges_circular_mask | contaminant_mask) # number of pixels that are masked (edged + mask)
+    nb_non_masked_pixels = (height_images*width_images) - nb_masked_pixels
+
+    if nb_masked_pixels == 40000: # All pixels are masked..
+        visit_skipped = 3
+        print(f"All pixels are masked... bad images, skipping...")
+        return pd.DataFrame(), visit_skipped
+    
+    
+    nb_cosmics, density_cosmics, nb_pixels_largest_cosmics, percentage_cosmic_pixels = cosmics_metrics(loc_cosmics, info_cosmics, nb_non_masked_pixels, PIXEL_SIZE, total_exp_time)
+            
+    # binary_images, nb_cosmics, images_contours, nb_pixels_largest_cosmics = detect_cosmics(masked_images, threshold_cosmics) 
+
+
+    
+    # Identify straylight    
+    straylight_boolean = remove_straylight_new(masked_images,edges_circular_mask,contaminant_mask,loc_cosmics) # straylight images flagges as FALSE, all others as TRUE
            
     if generate_plots:
         n = 13
         nb_cosmics_plot = nb_cosmics[n]
         title_plot = f"{id}, {target_name}, nexp: {n_exp}, exptime:{exp_time}, Texptime: {total_exp_time} "
         name_plot = f"SAA_visit_{id}_frame_{n}.png" if visit_type == 'SAA' else f"visit_{id}_frame_{n}.png"
-        genreate_diagnostic_plots(derotated_openCV_images, images, subtracted_median_images, temporal_median_substracted_images, threshold_noise, threshold_cosmics, mask, masked_images, binary_images, n, nb_cosmics_plot, title_plot, name_plot, show_plot = False)
+        genreate_diagnostic_plots(derotated_openCV_images, images, subtracted_median_images, temporal_median_substracted_images, threshold_noise, threshold_cosmics, contaminant_mask, masked_images, binary_images, n, nb_cosmics_plot, title_plot, name_plot, show_plot = False)
     
-    # Cosmic per cm2
-    nb_masked_pixels = np.sum(edges_circular_mask | mask) # number of pixels that are masked (edged + mask)
-    if nb_masked_pixels == 40000:
-        visit_skipped = 3
-        print(f"All pixels are masked... bad images, skipping...")
-        return pd.DataFrame(), visit_skipped
-    fraction_remaining_pixels = (height_images*width_images) - nb_masked_pixels
-    pixel_size = 13e-6 # m
-    cm2_analysed = fraction_remaining_pixels*((pixel_size*1e2)**2) # cm2
-    density_cosmics = nb_cosmics/cm2_analysed/total_exp_time # nb cosmics/cm2/sec
     
     print(f'{nb_masked_pixels} masked pixels')
     
     # Quantize images to take less space
 
-    # flattened_images           = [image.flatten().astype('uint8') for image in images_orig]
-    # flattened_derotated_images = [image.flatten().astype('uint8') for image in derotated_openCV_images]
-    # flattened_masked_images    = [image.flatten().astype('uint8') for image in masked_images]
-    # flattened_binary_images    = [image.flatten().astype('uint8') for image in binary_images]
-    
+    flattened_images           = [image.flatten().astype('uint8') for image in images_orig]
+    flattened_derotated_images = [image.flatten() for image in derotated_openCV_images]
+    flattened_masked_images    = [image.flatten().astype('uint8') for image in masked_images]
+    flattened_binary_images    = [image.flatten().astype('uint8') for image in binary_images]
     
     threshold_cosmics = threshold_cosmics*255/(65535*n_exp)
     
-    percentage_cosmic_pixels = cosmic_fraction(fraction_remaining_pixels, images_contours)*100
-    percentage_cosmics_rounded = np.round(percentage_cosmic_pixels, 3)
-    print(f'the most contaminated image contains {np.round(np.max(percentage_cosmics_rounded),1)}%  of pixels affected by cosmics')
+    #percentage_cosmic_pixels = cosmic_fraction(fraction_remaining_pixels, images_contours)*100
+    #percentage_cosmics_rounded = np.round(percentage_cosmic_pixels, 3)
+    print(f'the most contaminated image contains {np.round(np.max(percentage_cosmic_pixels),1)}%  of pixels affected by cosmics')
 
-    # flattened_mask = []
-    # for i in range(len(images)):
-    #     flattened_mask.append(mask.flatten())
+    flattened_mask = []
+    for i in range(len(images)):
+        flattened_mask.append(contaminant_mask.flatten())
         
     latitude = [metadata['LATITUDE'] for metadata in metadata_images]
     longitude = [metadata['LONGITUDE'] for metadata in metadata_images]
@@ -154,16 +164,16 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 'visit_ID': np.full(nb_images, id),
                                 'img_counter': np.arange(nb_images),
                                 # 'raw_images': flattened_images,
-                                # 'derotated_images': flattened_derotated_images,
-                                # 'masked_images': flattened_masked_images, 
-                                # 'binary_images': flattened_binary_images,
+                                'derotated_images': flattened_derotated_images,
+                                'masked_images': flattened_masked_images, 
+                                'binary_images': flattened_binary_images,
                                 # 'mask': flattened_mask,
                                 'JD': time_images_utc_jd,
                                 'time': time_images_utc,
                                 'nb_cosmics' : nb_cosmics.astype(int),
                                 'largest_cosmics': nb_pixels_largest_cosmics,
                                 'density_cosmics' : density_cosmics,
-                                'pix_cosmics': images_contours,
+                                # 'pix_cosmics': images_contours,
                                 'nb_masked_pixels': nb_masked_pixels.astype(int),
                                 'percentage_cosmics': percentage_cosmic_pixels,
                                 'im_height': np.full(nb_images, height_images),
@@ -181,7 +191,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 'LATITUDE': latitude,
                                 'LONGITUDE': longitude,
                                 'straylight_boolean': straylight_boolean
-                                }
+    }
     )
     
     data.set_index('JD',drop = True, inplace = True) # set index to JD
@@ -267,7 +277,7 @@ if __name__ == "__main__":
     threshold_noise_science = 10 # This is now scaled by sqrt(nexp) in the main loop. TBD: replace with a gaussian fit of the noise
     threshold_cosmics = 250
 
-    generate_plots = True
+    generate_plots = False
 
     # For a single visit
     '''
@@ -312,16 +322,13 @@ if __name__ == "__main__":
     all_data.to_pickle(save_path, compression='infer', protocol=5, storage_options=None)
     
     
-    if len(visit_skipped) > 0:
-        print("The following visits have been skipped as they  had to few images:")
+    if len(visit_skipped) > 0:   
+        for v_skipped in visit_skipped:
+            if  skipped_val == 1:
+                print(f"{v_skipped} has been skipped as it contains less than {MIN_IMAGES} images.")
+            elif  skipped_val == 2:
+                print(f"{v_skipped} has been skipped as it contains more than {MAX_IMAGES} images")
+            elif  skipped_val == 3:
+                print(f"{v_skipped} has all pixels masked, probably non standard. Bad visit for CR identification.")
     else:
         print("No skipped visits")
-    
-    for v_skipped in visit_skipped:
-        if  skipped_val == 1:
-            reason = f": contains less than {MIN_IMAGES} images."
-        elif  skipped_val == 2:
-            reason = f": contains more than {MAX_IMAGES} images"
-        elif  skipped_val == 3:
-            reason = f": Has all pixels masked, probably non standard. Bad visit for CR identification."
-        print(v_skipped,reason)

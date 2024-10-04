@@ -295,44 +295,107 @@ def detect_cosmics(masked_images, threshold):
         binary_images[i] = img
         
     # Initialize the counter of cosmics per image
-    nb_cosmics = np.zeros(np.shape(masked_images)[0])
-    images_contours = [] # List of contours for all images (size of nb of images)
-    nb_pixels_largest_cosmics = []
+    loc_cosmics  = []
+    stats_cosmics = []
+    # images_contours = [] # List of contours for all images (size of nb of images)
+
     
     # 1. Find the countours
     # 2. Go through all contours in images, and remove the ones that are only one pixels
     # 3. Store the remaining in the images_contours
     # 4. Get the number of pixels in the largest cosmic
+    # for i,image in enumerate(binary_images):
+        # curr_image_contours, _ = cv2.findContours(image.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        # indices_of_1_pixel_contours = []
+        # contours_list = list(curr_image_contours)
+        # for j,contour in enumerate(contours_list): # if there is only one pixel, remove this contour 
+        #     nb_pixels_in_contour = len(contour)
+        #     if (nb_pixels_in_contour == 1):
+        #         indices_of_1_pixel_contours.append(j)
+        # for index in sorted(indices_of_1_pixel_contours, reverse=True):
+        #     del contours_list[index]
+        # nb_cosmics[i] = len(contours_list)
+        # images_contours.append(contours_list)
+    
+    # new method, use the connectedComponentsWithStats function to recover the number of pixels in the blob. The above method doesn't work as intended, as only the pixels of the contours are returned, and not the ones inside.
     for i,image in enumerate(binary_images):
-        curr_image_contours, _ = cv2.findContours(image.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-        indices_of_1_pixel_contours = []
-        contours_list = list(curr_image_contours)
-        for j,contour in enumerate(contours_list): # if there is only one pixel, remove this contour 
-            nb_pixels_in_contour = len(contour)
-            if (nb_pixels_in_contour == 1):
-                indices_of_1_pixel_contours.append(j)
-        for index in sorted(indices_of_1_pixel_contours, reverse=True):
-            del contours_list[index]
-        nb_cosmics[i] = len(contours_list)
-        images_contours.append(contours_list)
-    
-        nb_pixels_largest_cosmics.append(find_largest_cosmic(contours_list))
-      
-    return binary_images, nb_cosmics, images_contours, nb_pixels_largest_cosmics
+        _, labels, stats, _ = cv2.connectedComponentsWithStats(image.astype(np.uint8))
+        loc_cosmics.append(labels) 
+        stats_cosmics.append(stats) 
 
-def find_largest_cosmic(pix_cosmics):
-    """
-    Use to identify the cosmic ray with the largest number of pixel. With more than a 100 we are very probably looking at a satelitte trail or straylight.
-    """
+      
+    return binary_images, loc_cosmics, stats_cosmics
+
+def cosmics_metrics(visit_labeled_cosmics, visit_info_cosmics, nb_non_masked_pixels, pixel_size, total_exp_time):
     
-    if len(pix_cosmics) > 0:
-        nb_pixels_cosmic = []
-        for cosmic in pix_cosmics:
-            nb_pixels_cosmic.append(np.shape(cosmic)[0])
+    nb_cosmics_arr = np.array([])
+    nb_pixels_largest_cosmics_arr = np.array([])
+    percentage_cosmic_pixels_arr = np.array([])
+    density_cosmics_arr = np.array([])
+    
+    for image_info_cosmic in visit_info_cosmics:
+
+        # get stats for all identified cosmics, excluding the first row which is the background
+        cosmics_stats = image_info_cosmic[1:,-1]
+        if (len(cosmics_stats) == 0) or (len(cosmics_stats[cosmics_stats != 1]) == 0):
+            nb_cosmics_arr = np.append(nb_cosmics_arr,0)
+            nb_pixels_largest_cosmics_arr = np.append(nb_pixels_largest_cosmics_arr,0)  
+            percentage_cosmic_pixels_arr = np.append(percentage_cosmic_pixels_arr,0)     
+            density_cosmics_arr = np.append(density_cosmics_arr,0)  
+            continue
+        else:
+            stats_no_1_pix = cosmics_stats[cosmics_stats != 1] # exclude single pixels
+            # nb_cosmics
+            nb_cosmics = len(stats_no_1_pix)
+            nb_cosmics_arr = np.append(nb_cosmics_arr,nb_cosmics) 
+            # largest cosmic
+            nb_pixels_largest_cosmics = np.max(stats_no_1_pix)
+            nb_pixels_largest_cosmics_arr = np.append(nb_pixels_largest_cosmics_arr, nb_pixels_largest_cosmics)
+            # percentage affected pixels
+            nb_pix_affected_no_1_pix = np.sum(stats_no_1_pix)
+            percentage_cosmic_pixels = (nb_pix_affected_no_1_pix/nb_non_masked_pixels)*100          
+            percentage_cosmic_pixels_arr = np.append(percentage_cosmic_pixels_arr, percentage_cosmic_pixels)
+            # density cosmics
+            cm2_analysed = nb_non_masked_pixels*((pixel_size*1e2)**2) # cm2
+            density_cosmics = nb_cosmics/cm2_analysed/total_exp_time
+            density_cosmics_arr = np.append(density_cosmics_arr,density_cosmics)
             
-        return int(np.max(nb_pixels_cosmic))
-    else:
-        return 0
+               
+    return nb_cosmics_arr, density_cosmics_arr, nb_pixels_largest_cosmics_arr, percentage_cosmic_pixels_arr
+
+# def find_largest_cosmic(pix_cosmics):
+#     """
+#     Use to identify the cosmic ray with the largest number of pixel. With more than a 100 we are very probably looking at a satelitte trail or straylight.
+#     """
+    
+#     if len(pix_cosmics) > 0:
+#         nb_pixels_cosmic = []
+#         for cosmic in pix_cosmics:
+#             nb_pixels_cosmic.append(np.shape(cosmic)[0])
+            
+#         return int(np.max(nb_pixels_cosmic))
+#     else:
+#         return 0
+
+
+# def cosmic_fraction(nb_remaining_pixels, contours):
+    
+#     # nb_cosmic_pixels = np.array([])
+#     # nb_cosmic_pixels = 0
+#     # for i in range(len(contours)):
+#     #     for j in range(len(contours[i])):
+#     #         nb_cosmic_pixels += len(contours[i][j])
+            
+#     nb_cosmic_pixels = np.array([])
+#     for i in range(len(contours)): # iterate through images
+#         nb_cosmic_pixels_current_image = 0 # nb pixels affected by cosmic in the current image
+#         for j in range(len(contours[i])): # iterate through each CR identified in the current image
+#             nb_cosmic_pixels_current_image += len(contours[i][j]) # add the nb of pixels in a given CR
+#         pixel_fraction = nb_cosmic_pixels_current_image / nb_remaining_pixels
+#         nb_cosmic_pixels = np.append(nb_cosmic_pixels, pixel_fraction)
+
+#     # return pixel_fraction
+#     return nb_cosmic_pixels
 
 
 def reshape_flatten_images(images_type, images):
@@ -606,19 +669,45 @@ def exponential(x, m, t, b):
 def hyperbolic(x, a, p, q):
     return (a/(x+p))+q
 
-def remove_straylight(masked_images):
-    masked_array = masked_images.copy()
+# def remove_straylight(masked_images):
+#     masked_array = masked_images.copy()
 
+#     #calculate median/mean of each image in array (background) -> to do: test if mean or median works better
+#     median_per_image = []
+#     mean_per_image = []
+#     for i in range(len(masked_array)):
+#         median_per_image.append(np.median(masked_array[i]))
+#         mean_per_image.append(np.mean(masked_array[i]))
+
+#     #calculate median/mean of new array
+#     median_new = np.median(median_per_image)
+#     mean_new = np.mean(median_per_image)
+
+#     background_threshold = median_new + 10 #arbitrary number for now -> see what will filter stray light the best
+
+#     #create binary array to flag straylight images -> straylight images are flagged as 0
+#     straylight_binary_array = (median_per_image > background_threshold)
+
+#     return straylight_binary_array
+
+def remove_straylight_new(masked_images,edges_circular_mask,contaminant_mask,loc_cosmics):
+    # Now not taking into account the masked (circular subArray, masked stars + CR) pixels
+    masked_array = masked_images.copy()
+    
     #calculate median/mean of each image in array (background) -> to do: test if mean or median works better
     median_per_image = []
     mean_per_image = []
-    for i in range(len(masked_array)):
-        median_per_image.append(np.median(masked_array[i]))
-        mean_per_image.append(np.mean(masked_array[i]))
+    for i,image in enumerate(masked_array):
+        ## Full mask (circular subArray + stars + cosmics)
+        cosmics_mask = loc_cosmics[i] > 0
+        mask_total = edges_circular_mask | contaminant_mask.astype(bool) | cosmics_mask
+        image[mask_total] = np.nan # convert to nans the pixels outside the circular crop of the subArray and the masked stars
+        median_per_image.append(np.nanmedian(image))
+        mean_per_image.append(np.nanmean(image))
 
     #calculate median/mean of new array
-    median_new = np.median(median_per_image)
-    mean_new = np.mean(median_per_image)
+    median_new = np.nanmedian(median_per_image)
+    mean_new = np.nanmean(median_per_image)
 
     background_threshold = median_new + 10 #arbitrary number for now -> see what will filter stray light the best
 
@@ -626,22 +715,3 @@ def remove_straylight(masked_images):
     straylight_binary_array = (median_per_image > background_threshold)
 
     return straylight_binary_array
-
-def cosmic_fraction(nb_remaining_pixels, contours):
-    
-    # nb_cosmic_pixels = np.array([])
-    # nb_cosmic_pixels = 0
-    # for i in range(len(contours)):
-    #     for j in range(len(contours[i])):
-    #         nb_cosmic_pixels += len(contours[i][j])
-            
-    nb_cosmic_pixels = np.array([])
-    for i in range(len(contours)): # iterate through images
-        nb_cosmic_pixels_current_image = 0 # nb pixels affected by cosmic in the current image
-        for j in range(len(contours[i])): # iterate through each CR identified in the current image
-            nb_cosmic_pixels_current_image += len(contours[i][j]) # add the nb of pixels in a given CR
-        pixel_fraction = nb_cosmic_pixels_current_image / nb_remaining_pixels
-        nb_cosmic_pixels = np.append(nb_cosmic_pixels, pixel_fraction)
-
-    # return pixel_fraction
-    return nb_cosmic_pixels
