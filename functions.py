@@ -694,24 +694,34 @@ def remove_straylight_new(masked_images,edges_circular_mask,contaminant_mask,loc
     # Now not taking into account the masked (circular subArray, masked stars + CR) pixels
     masked_array = masked_images.copy()
     
-    #calculate median/mean of each image in array (background) -> to do: test if mean or median works better
-    median_per_image = []
-    mean_per_image = []
+    
+    mean_per_image_stars_mask = []
+    mean_per_image_full_cosmics_mask = []
     for i,image in enumerate(masked_array):
         ## Full mask (circular subArray + stars + cosmics)
         cosmics_mask = loc_cosmics[i] > 0
-        mask_total = edges_circular_mask | contaminant_mask.astype(bool) | cosmics_mask
-        image[mask_total] = np.nan # convert to nans the pixels outside the circular crop of the subArray and the masked stars
-        median_per_image.append(np.nanmedian(image))
-        mean_per_image.append(np.nanmean(image))
+        mask_stars = edges_circular_mask | contaminant_mask.astype(bool) 
+        image[mask_stars] = np.nan # convert to nans the pixels outside the circular crop of the subArray and the masked stars
+        mean_per_image_stars_mask.append(np.nanmean(image)) # mean with the stars masked
+        # Now set to nan the cosmic affected pixels as well
+        image[cosmics_mask] = np.nan # convert to nans the pixels affected by cosmics
+        mean_per_image_full_cosmics_mask.append(np.nanmean(image)) # mean with the stars masked
 
-    #calculate median/mean of new array
-    median_new = np.nanmedian(median_per_image)
-    mean_new = np.nanmean(median_per_image)
+    # compute percent increase of mean with the star mask vs the full mask
+    percent_increase_star_masked_vs_cosmic_masked = ((np.array(mean_per_image_stars_mask)/np.array(mean_per_image_full_cosmics_mask))-1)*100
 
-    background_threshold = median_new + 10 #arbitrary number for now -> see what will filter stray light the best
+    #calculate mean of new array
+    mean_visit_stars_mask = np.nanmedian(mean_per_image_stars_mask)
+    mean_visit_full_cosmics_mask = np.nanmean(mean_per_image_full_cosmics_mask)
+    
+    thresh_mean_cosmic_mask = np.mean(mean_visit_full_cosmics_mask)+5
+    thresh_diff = 200
 
-    #create binary array to flag straylight images -> straylight images are flagged as 0
-    straylight_binary_array = (median_per_image > background_threshold)
+    # Create binary array to flag straylight images -> straylight images are flagged as 1
+    # Flag points as stray light if they show a large mean and a small diff between the star masked images and the full masked (inc. cosmics) images
+    straylight_binary_array = (mean_per_image_full_cosmics_mask > thresh_mean_cosmic_mask) & (percent_increase_star_masked_vs_cosmic_masked < thresh_diff)
+
+    # background_threshold = mean_new + 10 #arbitrary number for now -> see what will filter stray light the best
+    # straylight_binary_array = (median_per_image > background_threshold)
 
     return straylight_binary_array
