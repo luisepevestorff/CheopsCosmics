@@ -130,51 +130,52 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
       
       
     # ## TEST THIS WITH VISIT THAT HAS COSMICS ###
-    # images_test = derotated_openCV_images.copy()
-    # images_test_star = derotated_openCV_images.copy()
-    # images_test_CR = derotated_openCV_images.copy()
-    # mean_per_image = []
-    # mean_per_image_star = []
-    # mean_per_image_CR = []
+    images_test = derotated_openCV_images.copy()
+    images_test_star = derotated_openCV_images.copy()
+    images_test_CR = derotated_openCV_images.copy()
+    mean_per_image = []
+    mean_per_image_star = []
+    mean_per_image_CR = []
 
-    # for i,image in enumerate(images_test):
-    #     cosmics_mask = loc_cosmics[i] > 0
-    #     images_test[i][edges_circular_mask] = np.nan # convert to nans the pixels outside the circular crop of the subArray and the masked stars
-    #     mean_per_image.append(np.nanmean(images_test[i]))
-    #     images_test_star[i][edges_circular_mask | contaminant_mask.astype(bool)] = np.nan # convert to nans the pixels outside the circular crop of the subArray and the masked stars
-    #     mean_per_image_star.append(np.nanmean(images_test_star[i]))
-    #     images_test_CR[i][edges_circular_mask | contaminant_mask.astype(bool) | cosmics_mask] = np.nan # convert to nans the pixels outside the circular crop of the subArray and the masked stars
-    #     mean_per_image_CR.append(np.nanmean(images_test_CR[i]))
+    for i,image in enumerate(images_test):
+        cosmics_mask = loc_cosmics[i] > 0
+        images_test[i][edges_circular_mask] = np.nan # convert to nans the pixels outside the circular crop of the subArray and the masked stars
+        mean_per_image.append(np.nanmean(images_test[i]))
+        images_test_star[i][edges_circular_mask | contaminant_mask.astype(bool)] = np.nan # convert to nans the pixels outside the circular crop of the subArray and the masked stars
+        mean_per_image_star.append(np.nanmean(images_test_star[i]))
+        images_test_CR[i][edges_circular_mask | contaminant_mask.astype(bool) | cosmics_mask] = np.nan # convert to nans the pixels outside the circular crop of the subArray and the masked stars
+        mean_per_image_CR.append(np.nanmean(images_test_CR[i]))
     
-    # thresh_mean = np.mean(mean_per_image_CR)+5
-    # thresh_diff = 200
+    thresh_mean = np.mean(mean_per_image_CR)+5
+    thresh_diff = 200
     
-    # plt.figure(1)
-    # plt.plot(mean_per_image_star, 'o',lw = 2, alpha = 0.5, label = 'cicular + stars', color = "C0")
-    # plt.plot(mean_per_image_star, alpha = 0.5, label = 'cicular + stars', color = "C0")
-    # plt.axhline(np.mean(mean_per_image_star), color = "C0")
-    # plt.plot(mean_per_image_CR, 'o',lw = 1, alpha = 0.5, label = 'all', color = "C1")
-    # plt.plot(mean_per_image_CR, alpha = 0.5, label = 'all', color = "C1")
-    # plt.axhline(np.mean(mean_per_image_CR), color = "C1")
-    # plt.axhline(thresh_mean, ls = ':', lw = 2, color = "C3")
-    # plt.figure(2)
-    # percent_increase_star = ((np.array(mean_per_image_star)/np.array(mean_per_image_CR))-1)*100
-    # plt.plot(percent_increase_star, 'o',lw = 2, alpha = 0.5, label = 'cicular + stars', color = "C0")
-    # plt.plot(percent_increase_star, alpha = 0.5, label = 'cicular + stars', color = "C0")
-    # plt.axhline(thresh_diff, ls = ':', lw = 2, color = "C3")
-    # j = 0
-    # for val_CR, increase_star in zip(np.array(mean_per_image_CR),percent_increase_star):
-	# # (mean_full_mask > threshold_mean) & (mean_full_mask/mean_mask_stars < threshold_diff)
-    # # Image deviate from the mean of the visit AND is due to cosmics 
-    # # (i.e.,large diff between means of masked and non masked cosmics) ==> Keep
-    #     if (val_CR > thresh_mean) and (increase_star < thresh_diff): # Remove these
-    #         plt.axvline(j, linewidth = 3, color = 'red', alpha = 0.2)
-    #     if straylight_boolean[j] > 0.5:
-    #         plt.axvline(j, linewidth = 1, color = 'blue')
-    #     j += 1
+    plt.figure(1)
+    plt.plot(mean_per_image_star, 'o',lw = 2, alpha = 0.5, label = 'cicular + stars', color = "C0")
+    plt.plot(mean_per_image_star, alpha = 0.5, color = "C0")
+    plt.axhline(np.mean(mean_per_image_star), color = "C0")
+    plt.plot(mean_per_image_CR, 'o',lw = 1, alpha = 0.5, label = 'cicular + stars + CR', color = "C1")
+    plt.plot(mean_per_image_CR, alpha = 0.5, color = "C1")
+    plt.axhline(np.mean(mean_per_image_CR), color = "C1")
+    plt.axhline(thresh_mean, ls = ':', lw = 2, color = "C3")
+    plt.legend()
+    plt.figure(2)
+    percent_increase_star = ((np.array(mean_per_image_star)/np.array(mean_per_image_CR))-1)*100
+    plt.plot(percent_increase_star, 'o',lw = 2, alpha = 0.5, label = 'percent increase of mean for circ + star', color = "C0")
+    plt.plot(percent_increase_star, alpha = 0.5, color = "C0")
+    plt.axhline(thresh_diff, ls = ':', lw = 2, color = "C3")
+    j = 0
+    for val_CR, increase_star in zip(np.array(mean_per_image_CR),percent_increase_star):
+	# (mean_full_mask > threshold_mean) & (mean_full_mask/mean_mask_stars < threshold_diff)
+    # Image deviate from the mean of the visit AND is due to cosmics 
+    # (i.e.,large diff between means of masked and non masked cosmics) ==> Keep
+        if (val_CR > thresh_mean) and (increase_star < thresh_diff): # Remove these
+            plt.axvline(j, linewidth = 3, color = 'red', alpha = 0.2)
+        if straylight_boolean[j] > 0.5:
+            plt.axvline(j, linewidth = 1, color = 'blue')
+        j += 1
             
-    # plt.legend()
-    # plt.show()
+    plt.legend()
+    plt.show()
     
          
     if generate_plots:
@@ -212,23 +213,23 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 'visit_ID': np.full(nb_images, id),
                                 'img_counter': np.arange(nb_images),
                                 # 'raw_images': flattened_images,
-                                'derotated_images': flattened_derotated_images,
-                                'masked_images': flattened_masked_images, 
-                                'binary_images': flattened_binary_images,
+                                # 'derotated_images': flattened_derotated_images,
+                                # 'masked_images': flattened_masked_images, 
+                                # 'binary_images': flattened_binary_images,
                                 # 'mask': flattened_mask,
                                 'JD': time_images_utc_jd,
                                 'time': time_images_utc,
                                 'nb_cosmics' : nb_cosmics.astype(int),
                                 'largest_cosmics': nb_pixels_largest_cosmics,
                                 'density_cosmics' : density_cosmics,
-                                # 'pix_cosmics': images_contours,
+                                # 'pix_cosmics': loc_cosmics,
                                 'nb_masked_pixels': nb_masked_pixels.astype(int),
                                 'percentage_cosmics': percentage_cosmic_pixels,
                                 'im_height': np.full(nb_images, height_images),
                                 'im_width': np.full(nb_images, width_images),
                                 'threshold_cosmics': np.full(nb_images, threshold_cosmics),
                                 'n_exp': np.full(nb_images, n_exp),
-                                'exp_time': np.full(nb_images, exp_time),
+                                'total_exp_time': np.full(nb_images, total_exp_time),
                                 'los_to_sun': np.full(nb_images, los_to_sun),
                                 'los_to_moon': np.full(nb_images, los_to_moon),
                                 'los_to_earth': np.full(nb_images, los_to_earth),
