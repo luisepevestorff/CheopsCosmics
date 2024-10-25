@@ -366,8 +366,6 @@ def cosmics_metrics(visit_labeled_cosmics, visit_info_cosmics, nb_non_masked_pix
             density_cosmics_arr = np.append(density_cosmics_arr,density_cosmics)
             
     # percentage affected pixels per sec
-    percentage_cosmic_pixels_arr = np.sum(stats_no_1_pix)
-    percentage_cosmic_pixels = (nb_pix_affected_no_1_pix/nb_non_masked_pixels)*100          
     percentage_cosmic_pixels_per_sec_arr = percentage_cosmic_pixels_arr/total_exp_time
     
     return nb_cosmics_arr, density_cosmics_arr, nb_pixels_largest_cosmics_arr, percentage_cosmic_pixels_arr, percentage_cosmic_pixels_per_sec_arr
