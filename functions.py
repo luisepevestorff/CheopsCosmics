@@ -300,6 +300,7 @@ def detect_cosmics(masked_images, threshold):
     # Initialize the counter of cosmics per image
     loc_cosmics  = []
     stats_cosmics = []
+    centroids_cosmics = []
     # images_contours = [] # List of contours for all images (size of nb of images)
 
     
@@ -322,12 +323,13 @@ def detect_cosmics(masked_images, threshold):
     
     # new method, use the connectedComponentsWithStats function to recover the number of pixels in the blob. The above method doesn't work as intended, as only the pixels of the contours are returned, and not the ones inside.
     for i,image in enumerate(binary_images):
-        _, labels, stats, _ = cv2.connectedComponentsWithStats(image.astype(np.uint8))
+        _, labels, stats, centroids = cv2.connectedComponentsWithStats(image.astype(np.uint8))
         loc_cosmics.append(labels) 
         stats_cosmics.append(stats) 
+        centroids_cosmics.append(centroids)
 
       
-    return binary_images, loc_cosmics, stats_cosmics
+    return binary_images, loc_cosmics, stats_cosmics, centroids_cosmics
 
 def cosmics_metrics(visit_labeled_cosmics, visit_info_cosmics, nb_non_masked_pixels, pixel_size, total_exp_time):
     
@@ -344,7 +346,7 @@ def cosmics_metrics(visit_labeled_cosmics, visit_info_cosmics, nb_non_masked_pix
             nb_cosmics_arr = np.append(nb_cosmics_arr,0)
             nb_pixels_largest_cosmics_arr = np.append(nb_pixels_largest_cosmics_arr,0)  
             percentage_cosmic_pixels_arr = np.append(percentage_cosmic_pixels_arr,0)     
-            density_cosmics_arr = np.append(density_cosmics_arr,0)  
+            density_cosmics_arr = np.append(density_cosmics_arr,0)
             continue
         else:
             stats_no_1_pix = cosmics_stats[cosmics_stats != 1] # exclude single pixels
@@ -732,6 +734,62 @@ def remove_straylight_new(masked_images,edges_circular_mask,contaminant_mask,loc
     # straylight_binary_array = (median_per_image > background_threshold)
 
     return straylight_binary_array
+
+def check_positions(positions):
+   coordinates_index = []
+   for i in range(len(positions)):
+      this_visit = i
+      for j in range(len(positions[i])):
+         for k in range(len(positions[i][j])):
+               this_element = positions[i][j][k]
+               this_element_index = {j,k}
+               counter = 0
+
+               if this_element != 0:
+                  # check right
+                  if k < len(positions[i][j])-1:
+                     if positions[i][j][k+1] != 0:
+                        counter += 1
+                     
+                  # check left
+                  if k > 0:
+                     if positions[i][j][k-1] != 0:
+                        counter += 1
+
+                  # check upper
+                  if j > 0:
+                     if positions[i][j-1][k] != 0:
+                        counter += 1
+                     
+                  # check lower
+                  if j < len(positions[i])-1:
+                     if positions[i][j+1][k]:
+                        counter += 1
+                     
+                  # check upper right
+                  if j > 0 and k < len(positions[i][j])-1:
+                     if positions[i][j-1][k+1]:
+                        counter += 1
+                     
+                  # check upper left
+                  if j > 0 and k > 0:
+                     if positions[i][j-1][k-1]:
+                        counter += 1
+                     
+                  # check lower right
+                  if j < len(positions[i])-1 and k < len(positions[i][j])-1:
+                     if positions[i][j+1][k+1]:
+                        counter += 1
+                     
+                  # check lower left
+                  if j < len(positions[i])-1 and k > 0:
+                     if positions[i][j+1][k-1]:
+                        counter += 1
+
+               if counter > 0:
+                  coordinates_index.append(this_element_index)
+                  coordinates_index.append("visit %s" %this_visit)
+   return coordinates_index
 
 
 ##################################################
