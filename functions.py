@@ -759,27 +759,86 @@ def check_positions(positions):
                      if positions[i][j+1][k]:
                         counter += 1
                      
-                  # check upper right
-                  if j > 0 and k < len(positions[i][j])-1:
-                     if positions[i][j-1][k+1]:
-                        counter += 1
+                #   # check upper right
+                #   if j > 0 and k < len(positions[i][j])-1:
+                #      if positions[i][j-1][k+1]:
+                #         counter += 1
                      
-                  # check upper left
-                  if j > 0 and k > 0:
-                     if positions[i][j-1][k-1]:
-                        counter += 1
+                #   # check upper left
+                #   if j > 0 and k > 0:
+                #      if positions[i][j-1][k-1]:
+                #         counter += 1
                      
-                  # check lower right
-                  if j < len(positions[i])-1 and k < len(positions[i][j])-1:
-                     if positions[i][j+1][k+1]:
-                        counter += 1
+                #   # check lower right
+                #   if j < len(positions[i])-1 and k < len(positions[i][j])-1:
+                #      if positions[i][j+1][k+1]:
+                #         counter += 1
                      
-                  # check lower left
-                  if j < len(positions[i])-1 and k > 0:
-                     if positions[i][j+1][k-1]:
-                        counter += 1
+                #   # check lower left
+                #   if j < len(positions[i])-1 and k > 0:
+                #      if positions[i][j+1][k-1]:
+                #         counter += 1
 
                if counter > 0:
                   coordinates_index.append(this_element_index)
                   coordinates_index.append("visit %s" %this_visit)
+
+            
    return coordinates_index
+
+def find_cosmics(image):
+    neighbors = {}
+    visits, rows, cols = len(image), len(image[0]), len(image[0][0])
+
+    for i in range(visits):
+        for j in range(rows):
+            for k in range(cols):
+                if image[i][j][k] != 0:
+                    coordinates = (i, j, k)
+                    neighbors[coordinates] = []
+
+                    for ij in [-1, 0, 1]:
+                        for ik in [-1, 0, 1]:
+                            if ij == 0 and ik == 0:
+                                continue
+                            nj, nk = j + ij, k + ik
+                            if 0 <= nj < rows and 0 <= nk < cols and image[i][nj][nk] != 0:
+                                neighbors[coordinates].append((i, nj, nk))
+
+    return neighbors
+
+def flood_fill(image, visited, r, c, depth, rows, cols):
+    stack = [(r,c)]
+    connected_coordinates = []
+
+    while stack:
+        cr, cc = stack.pop()
+        if visited[cr][cc]:
+            continue
+        
+        visited[cr][cc] = True
+        connected_coordinates.append((depth, cr, cc))
+
+        for dr in [-1,0,1]:
+            for dc in [-1, 0, 1]:
+                if abs(dr) + abs(dc) != 1:
+                    continue
+                nr, nc = cr + dr, cc + dc
+                if 0 <= nr < rows and 0 <= nc < cols and image[depth][nr][nc]:
+                    stack.append((nr,nc))
+
+    return connected_coordinates
+
+def find_CRs(image):
+    depth, rows, cols = len(image), len(image[0]), len(image[0][0])
+    visited = [[False] * cols for _ in range(rows)]
+    CRs = []
+
+    for i in range(depth):
+        for j in range(rows):
+            for k in range(cols):
+                if image[i][j][k] != 0 and not visited[j][k]:
+                    CRs = flood_fill(image, visited, j, k, i, rows, cols)
+                    CRs.append(CRs)
+
+    return CRs
