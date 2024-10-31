@@ -167,6 +167,7 @@ Luise/_pycache_/
 Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_visits/
 Pipeline_new/SAA_ORs_reduction_pipeline_v_0.1.0/SAA_ORs_reduction_pipeline_v_0.1.0/Science_visits
 test_visits/
+plots/
 
 #Ignore large output files
 Luise/CR_density.png

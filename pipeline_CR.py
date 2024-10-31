@@ -120,7 +120,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
         return pd.DataFrame(), visit_skipped
     
     
-    nb_cosmics, density_cosmics, nb_pixels_largest_cosmics, percentage_cosmic_pixels = cosmics_metrics(loc_cosmics, info_cosmics, nb_non_masked_pixels, PIXEL_SIZE, total_exp_time)
+    nb_cosmics, density_cosmics, nb_pixels_largest_cosmics, percentage_cosmic_pixels, percentage_cosmic_pixels_per_s = cosmics_metrics(loc_cosmics, info_cosmics, nb_non_masked_pixels, PIXEL_SIZE, total_exp_time)
             
     # binary_images, nb_cosmics, images_contours, nb_pixels_largest_cosmics = detect_cosmics(masked_images, threshold_cosmics) 
 
@@ -226,6 +226,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 # 'pix_cosmics': loc_cosmics,
                                 'nb_masked_pixels': nb_masked_pixels.astype(int),
                                 'percentage_cosmics': percentage_cosmic_pixels,
+                                'percentage_cosmics_per_s': percentage_cosmic_pixels_per_s,
                                 'im_height': np.full(nb_images, height_images),
                                 'im_width': np.full(nb_images, width_images),
                                 'threshold_cosmics': np.full(nb_images, threshold_cosmics),

@@ -8,6 +8,9 @@ import os
 import cv2
 from pathlib import Path
 from sqlalchemy import text
+import ipywidgets
+from scipy.stats import binned_statistic_2d
+
 
 MAIN_PATH = Path.cwd()
 
@@ -361,9 +364,11 @@ def cosmics_metrics(visit_labeled_cosmics, visit_info_cosmics, nb_non_masked_pix
             cm2_analysed = nb_non_masked_pixels*((pixel_size*1e2)**2) # cm2
             density_cosmics = nb_cosmics/cm2_analysed/total_exp_time
             density_cosmics_arr = np.append(density_cosmics_arr,density_cosmics)
-
-               
-    return nb_cosmics_arr, density_cosmics_arr, nb_pixels_largest_cosmics_arr, percentage_cosmic_pixels_arr
+            
+    # percentage affected pixels per sec
+    percentage_cosmic_pixels_per_sec_arr = percentage_cosmic_pixels_arr/total_exp_time
+    
+    return nb_cosmics_arr, density_cosmics_arr, nb_pixels_largest_cosmics_arr, percentage_cosmic_pixels_arr, percentage_cosmic_pixels_per_sec_arr
 
 # def find_largest_cosmic(pix_cosmics):
 #     """
@@ -786,59 +791,245 @@ def check_positions(positions):
             
    return coordinates_index
 
-def find_cosmics(image):
-    neighbors = {}
-    visits, rows, cols = len(image), len(image[0]), len(image[0][0])
 
-    for i in range(visits):
-        for j in range(rows):
-            for k in range(cols):
-                if image[i][j][k] != 0:
-                    coordinates = (i, j, k)
-                    neighbors[coordinates] = []
+##################################################
+########### Functions analysis notebooks #########
+##################################################
 
-                    for ij in [-1, 0, 1]:
-                        for ik in [-1, 0, 1]:
-                            if ij == 0 and ik == 0:
-                                continue
-                            nj, nk = j + ij, k + ik
-                            if 0 <= nj < rows and 0 <= nk < cols and image[i][nj][nk] != 0:
-                                neighbors[coordinates].append((i, nj, nk))
-
-    return neighbors
-
-def flood_fill(image, visited, r, c, depth, rows, cols):
-    stack = [(r,c)]
-    connected_coordinates = []
-
-    while stack:
-        cr, cc = stack.pop()
-        if visited[cr][cc]:
-            continue
+def plot_function(data_to_plot, title):
+    
+    def plotimg(idx):
+        # Update histogram
+        ax[0].clear()
+        ax[0].hist(data_to_plot[int(idx)].flatten(), bins = len(np.unique(data_to_plot[int(idx)].flatten())))
+        # Update image
+        img.set_data(data_to_plot[int(idx),:,:])
+        im = ax[1].imshow(data_to_plot[int(idx),:,:], origin='lower', cmap = 'viridis')
+        ax[0].axvline(np.nanmedian(data_to_plot[int(idx),:,:]), c = 'r',  alpha = 0.5) # median pixel value
+        ax[0].axvline(np.nanmean(data_to_plot[int(idx),:,:]), c = 'g', alpha = 0.5) # mean pixel value
+        #plt.colorbar(im)
+        fig.canvas.draw_idle()
         
-        visited[cr][cc] = True
-        connected_coordinates.append((depth, cr, cc))
+    fig, ax = plt.subplots(ncols = 2, figsize=(12,4))
+    img = ax[1].imshow(data_to_plot[0], origin='lower')
+    #colorbar = plt.colorbar(img)
+    ax[0].set_xlabel('Brightness')
+    ax[0].set_ylabel('Nb of pixels')
+    plt.suptitle(title, weight = 'bold')
 
-        for dr in [-1,0,1]:
-            for dc in [-1, 0, 1]:
-                if abs(dr) + abs(dc) != 1:
-                    continue
-                nr, nc = cr + dr, cc + dc
-                if 0 <= nr < rows and 0 <= nc < cols and image[depth][nr][nc]:
-                    stack.append((nr,nc))
+    ipywidgets.interact(plotimg, idx = ipywidgets.FloatSlider(value=0,min=0,max=np.shape(data_to_plot)[0]-1,step=1))
+    plt.show()
+    
+def apply_filters(data, filter_names, values, reverse_filters):
+    
+    # Available filters ['latitude-','latitude+','visit','density_cosmics','nb_cosmics','no_straylight','largest_cosmics','percentage_cosmics','percentage_cosmics_per_s', 'exp_time','n_exp']
+    list_filter_names = ['time-','time+','latitude-','latitude+','longitude-','longitude-','visit','density_cosmics','nb_cosmics','no_straylight','largest_cosmics','percentage_cosmics','percentage_cosmics_per_s', 'exp_time', 'n_exp']
+    
+    filtered_data = data.copy()
+    
+    for filter_name, value, reverse in zip(filter_names,values, reverse_filters): 
+        
+        if reverse:
+            inf = '>'
+            sup = '<'
+        else: 
+            inf = '<'
+            sup = '>'
+            
+        if filter_name == 'time-':
+            print(f"Keep data {sup} {value}")
+            filter_to_apply = filtered_data['time'] >= value
+        elif filter_name == 'time+':
+            print(f"Keep data {inf} {value}")
+            filter_to_apply = filtered_data['time'] <= value
+        elif filter_name == 'exp_time':
+            print(f"Keep data with exposure time {inf} {value}")
+            filter_to_apply = filtered_data['exp_time'] <= value
+        elif filter_name == 'n_exp':
+            print(f"Keep data with {inf} {value} n_exp (stacked images)")
+            filter_to_apply = filtered_data['n_exp'] <= value
+        elif filter_name == 'latitude-':
+            print(f"Kepp data with latitude {sup} {value}")
+            filter_to_apply = filtered_data['LATITUDE'] > value
+        elif filter_name == 'latitude+':
+            print(f"Keep with latitude {inf} {value}")
+            filter_to_apply = filtered_data['LATITUDE'] < value  
+        elif filter_name == 'longitude-':
+            print(f"Kepp data with longitude {sup} {value}")
+            filter_to_apply = filtered_data['LONGITUDE'] > value
+        elif filter_name == 'longitude+':
+            print(f"Keep with longitude {inf} {value}")
+            filter_to_apply = filtered_data['LONGITUDE'] < value  
+        elif filter_name == 'visit':
+            print(f"Keep data only from {value}")
+            filter_to_apply = filtered_data['visit_ID'] == value
+        elif filter_name == 'density_cosmics':
+            print(f"Keep data only with a density of cosmics {sup} {value}")
+            filter_to_apply = filtered_data['density_cosmics'] > value        
+        elif filter_name == 'nb_cosmics':
+            print(f"Keep data only with a number of cosmics {sup} {value}")
+            filter_to_apply = filtered_data['nb_cosmics'] > value        
+        elif filter_name == 'no_straylight':
+            if reverse:
+                print(f"Keep data only affected with straylight")
+            else:
+                print(f"Keep data only not affected with straylight")
+            filter_to_apply = filtered_data['straylight_boolean']
+            filter_to_apply = ~filter_to_apply
+        elif filter_name == 'largest_cosmics':
+            print(f"Keep data only with a largest cosmic {inf} {value}")
+            filter_to_apply = filtered_data['largest_cosmics'] < value
+        elif filter_name == 'percentage_cosmics':
+            print(f"Keep data images with {inf} {value}% of pixels affected by cosmics")
+            filter_to_apply = filtered_data['percentage_cosmics'] < value
+        elif filter_name == 'percentage_cosmics_per_s':
+            print(f"Keep data images with {inf} {value}% of pixels affected by cosmics")
+            filter_to_apply = filtered_data['percentage_cosmics_per_s'] < value
+        else:
+            print(f"{filter_name} not in {list_filter_names}")   
+            
+        # apply filter 
+        if reverse:
+            filter_to_apply = ~filter_to_apply
 
-    return connected_coordinates
+        nb_points = len(filtered_data)
+        filtered_data = filtered_data[filter_to_apply]
+        nb_datapoints_remomoved =  nb_points - len(filtered_data)
+        print(f"Removed {nb_datapoints_remomoved} data points, kept {len(filtered_data)}")
+        
+    return filtered_data
 
-def find_CRs(image):
-    depth, rows, cols = len(image), len(image[0]), len(image[0][0])
-    visited = [[False] * cols for _ in range(rows)]
-    CRs = []
+def bin_data(x,y,c,interpolation = 'None', type = None):
+    
+    # Bin and maks SAA mask contour
+    lon_min, lon_max = -180, 180
+    lat_min, lat_max = -90, 90
 
-    for i in range(depth):
-        for j in range(rows):
-            for k in range(cols):
-                if image[i][j][k] != 0 and not visited[j][k]:
-                    CRs = flood_fill(image, visited, j, k, i, rows, cols)
-                    CRs.append(CRs)
+    # interpolation can be 'None, 'base_grid' or 'fine_grid'
+    
+    from scipy.interpolate import RBFInterpolator
+    bin_size = 5
+    x_bins = np.arange(lon_min+bin_size, lon_max, bin_size)
+    y_bins = np.arange(lat_min+bin_size, lat_max, bin_size)
+    
+    # bin
+    ret = binned_statistic_2d(x, y, c, statistic='median', bins=[x_bins, y_bins])
 
-    return CRs
+    # Get the array of bin values and the bin edges
+    statistic = ret.statistic.T
+    x_edges = ret.x_edge
+    y_edges = ret.y_edge
+
+    # Compute the bin centers
+    bin_centers_x = (x_edges[:-1] + x_edges[1:]) / 2
+    bin_centers_y = (y_edges[:-1] + y_edges[1:]) / 2
+    X, Y = np.meshgrid(bin_centers_x, bin_centers_y)
+
+    # Flatten the arrays for easier indexing
+    points = np.column_stack([X.ravel(), Y.ravel()])
+    values = statistic.ravel()
+
+    # Remove NaN values from the points and values
+    mask = ~np.isnan(values)
+    valid_points = points[mask]
+    valid_values = values[mask]
+
+    # Define a finer grid for finer interpolation
+    nb_points_finer_grid = 200
+    finer_x = np.linspace(bin_centers_x.min(), bin_centers_x.max(), nb_points_finer_grid)  # More points
+    finer_y = np.linspace(bin_centers_y.min(), bin_centers_y.max(), nb_points_finer_grid)  # More points
+    Finer_X, Finer_Y = np.meshgrid(finer_x, finer_y)
+
+    # Flatten the finer grid for interpolation
+    finer_points = np.column_stack([Finer_X.ravel(), Finer_Y.ravel()])
+
+    # Use the same valid_points and valid_values from the previous example
+    interpolator = RBFInterpolator(valid_points, valid_values, kernel='linear', smoothing = 0)
+    
+    # Interpolate
+    if interpolation == 'None':
+        print("No interpolation")
+        statistic = ret.statistic.T
+        lon_mesh = None
+        lat_mesh = None
+    elif interpolation == 'base_grid':
+        print(f"Interpolating on the {bin_size} degrees grid")
+        values = interpolator(points)
+        statistic = values.reshape(X.shape)
+        lon_mesh = X
+        lat_mesh = Y
+    elif interpolation == 'fine_grid':
+        print(f"Interpolating on a finer grid")
+        finer_values = interpolator(finer_points)
+        statistic = finer_values.reshape(Finer_X.shape)
+        lon_mesh = Finer_X
+        lat_mesh = Finer_Y
+    if type == 'density_cosmics':
+        # set low values to 1
+        mask_low_values = statistic < 1
+        statistic[mask_low_values] = 1
+    elif (type == 'percentage_cosmics') or (type == 'percentage_cosmics_per_s'):
+        # set low values to 0.01
+        mask_low_values = statistic < 0.01
+        statistic[mask_low_values] = 0.01
+    else:
+        raise ValueError("Please set type to convert low values, conversion ignored")
+        
+    return statistic, bin_centers_x, bin_centers_y, lon_mesh, lat_mesh
+
+def circle_points(lat, lon, radius, num_points=100):
+    """
+    Calculate the latitude and longitude points that form a circle of given radius
+    centered on a given latitude and longitude.
+
+    :param lat: Latitude of the center in degrees
+    :param lon: Longitude of the center in degrees
+    :param radius: Radius of the circle in degrees (approx. for small circles)
+    :param num_points: Number of points to generate along the circle
+    :return: Two numpy arrays (lats, lons) representing the circle's latitude and longitude points
+    """
+    # Convert radius from degrees to radians
+    radius_rad = np.deg2rad(radius)
+
+    # Generate equally spaced angles around the circle
+    angles = np.linspace(0, 2 * np.pi, num_points)
+
+    # Calculate the latitude and longitude points
+    latitudes = np.arcsin(np.sin(np.deg2rad(lat)) * np.cos(radius_rad) +
+                          np.cos(np.deg2rad(lat)) * np.sin(radius_rad) * np.cos(angles))
+    
+    longitudes = np.deg2rad(lon) + np.arctan2(np.sin(angles) * np.sin(radius_rad) * np.cos(np.deg2rad(lat)),
+                                               np.cos(radius_rad) - np.sin(np.deg2rad(lat)) * np.sin(latitudes))
+    
+    # Convert the latitude and longitude from radians to degrees
+    latitudes = np.rad2deg(latitudes)
+    longitudes = np.rad2deg(longitudes)
+    
+    sort_lon = np.argsort(longitudes)
+
+    return latitudes[sort_lon], longitudes[sort_lon]
+
+def get_SAA_mask(file):
+
+    SAA_file = Path("ref_files") / file # post-LTAN
+
+    data_SAA = read_SAA_map(SAA_file)
+
+    # Plot SAA mask
+    x = data_SAA['longitude']
+    y = data_SAA['latitude']
+    c = data_SAA['SAA_FLAG']
+
+    # Bin and maks SAA mask contour
+    lon_min, lon_max = -180, 180
+    lat_min, lat_max = -90, 90
+        
+    SAA_map_bins_lon = 3
+    SAA_map_bins_lat = 2
+    x_bins_SAA = np.arange(lon_min + SAA_map_bins_lon, lon_max,SAA_map_bins_lon)
+    y_bins_SAA = np.arange(lat_min + SAA_map_bins_lat, lat_max,SAA_map_bins_lat)
+
+    SAA_masked_binned = binned_statistic_2d(x, y, c, statistic='median', bins=[x_bins_SAA, y_bins_SAA]).statistic.T
+    lon, lat = np.meshgrid(x_bins_SAA, y_bins_SAA)
+    
+    return SAA_masked_binned, lat, lon, lat_min, lat_max, lon_min, lon_max
