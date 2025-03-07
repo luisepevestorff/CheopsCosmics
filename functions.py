@@ -764,29 +764,31 @@ def check_positions(positions):
                      if positions[i][j+1][k]:
                         counter += 1
                      
-                  # check upper right
-                  if j > 0 and k < len(positions[i][j])-1:
-                     if positions[i][j-1][k+1]:
-                        counter += 1
+                #   # check upper right
+                #   if j > 0 and k < len(positions[i][j])-1:
+                #      if positions[i][j-1][k+1]:
+                #         counter += 1
                      
-                  # check upper left
-                  if j > 0 and k > 0:
-                     if positions[i][j-1][k-1]:
-                        counter += 1
+                #   # check upper left
+                #   if j > 0 and k > 0:
+                #      if positions[i][j-1][k-1]:
+                #         counter += 1
                      
-                  # check lower right
-                  if j < len(positions[i])-1 and k < len(positions[i][j])-1:
-                     if positions[i][j+1][k+1]:
-                        counter += 1
+                #   # check lower right
+                #   if j < len(positions[i])-1 and k < len(positions[i][j])-1:
+                #      if positions[i][j+1][k+1]:
+                #         counter += 1
                      
-                  # check lower left
-                  if j < len(positions[i])-1 and k > 0:
-                     if positions[i][j+1][k-1]:
-                        counter += 1
+                #   # check lower left
+                #   if j < len(positions[i])-1 and k > 0:
+                #      if positions[i][j+1][k-1]:
+                #         counter += 1
 
                if counter > 0:
                   coordinates_index.append(this_element_index)
                   coordinates_index.append("visit %s" %this_visit)
+
+            
    return coordinates_index
 
 

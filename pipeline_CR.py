@@ -219,6 +219,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 # 'mask': flattened_mask,
                                 'JD': time_images_utc_jd,
                                 'time': time_images_utc,
+                                'info_cosmics': info_cosmics,
                                 'nb_cosmics' : nb_cosmics.astype(int),
                                 'largest_cosmics': nb_pixels_largest_cosmics,
                                 'density_cosmics' : density_cosmics,
@@ -368,7 +369,7 @@ if __name__ == "__main__":
     start_data = all_data.iloc[0].time.strftime(format = "%Y_%m_%d")
     end_data = all_data.iloc[-1].time.strftime(format = "%Y_%m_%d")
     file_name = "data_" + start_data + "_to_" + end_data + ".pkl"
-    save_path = MAIN_PATH / file_name
+    save_path = MAIN_PATH /"pkl_files"/ file_name
     all_data.to_pickle(save_path, compression='infer', protocol=5, storage_options=None)
     
     
