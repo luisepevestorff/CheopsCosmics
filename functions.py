@@ -897,7 +897,7 @@ def apply_filters(data, filter_names, values, reverse_filters):
         
     return filtered_data
 
-def bin_data(x,y,c,interpolation = 'None', type = None):
+def bin_data(x,y,c,interp_grid_size = 2.5, type = None):
     
     # Bin and maks SAA mask contour
     lon_min, lon_max = -180, 180
@@ -907,8 +907,8 @@ def bin_data(x,y,c,interpolation = 'None', type = None):
     
     from scipy.interpolate import RBFInterpolator
     bin_size = 5
-    x_bins = np.arange(lon_min+bin_size, lon_max, bin_size)
-    y_bins = np.arange(lat_min+bin_size, lat_max, bin_size)
+    x_bins = np.arange(lon_min, lon_max+bin_size, bin_size)
+    y_bins = np.arange(lat_min, lat_max+bin_size, bin_size)
     
     # bin
     ret = binned_statistic_2d(x, y, c, statistic='median', bins=[x_bins, y_bins])
@@ -931,37 +931,35 @@ def bin_data(x,y,c,interpolation = 'None', type = None):
     mask = ~np.isnan(values)
     valid_points = points[mask]
     valid_values = values[mask]
+    
+    
 
-    # Define a finer grid for finer interpolation
-    nb_points_finer_grid = 200
-    finer_x = np.linspace(bin_centers_x.min(), bin_centers_x.max(), nb_points_finer_grid)  # More points
-    finer_y = np.linspace(bin_centers_y.min(), bin_centers_y.max(), nb_points_finer_grid)  # More points
+    # # Define a finer grid for finer interpolation
+    # nb_points_finer_grid = 200
+    finer_x = np.arange(lon_min, lon_max+interp_grid_size, interp_grid_size)
+    finer_y = np.arange(lat_min, lat_max+interp_grid_size, interp_grid_size)
     Finer_X, Finer_Y = np.meshgrid(finer_x, finer_y)
+    # finer_x = np.linspace(bin_centers_x.min(), bin_centers_x.max(), nb_points_finer_grid)  # More points
+    # finer_y = np.linspace(bin_centers_y.min(), bin_centers_y.max(), nb_points_finer_grid)  # More points
+    # Finer_X, Finer_Y = np.meshgrid(finer_x, finer_y)
 
-    # Flatten the finer grid for interpolation
+    # # Flatten the finer grid for interpolation
     finer_points = np.column_stack([Finer_X.ravel(), Finer_Y.ravel()])
 
     # Use the same valid_points and valid_values from the previous example
     interpolator = RBFInterpolator(valid_points, valid_values, kernel='linear', smoothing = 0)
-    
-    # Interpolate
-    if interpolation == 'None':
-        print("No interpolation")
-        statistic = ret.statistic.T
-        lon_mesh = None
-        lat_mesh = None
-    elif interpolation == 'base_grid':
-        print(f"Interpolating on the {bin_size} degrees grid")
-        values = interpolator(points)
-        statistic = values.reshape(X.shape)
-        lon_mesh = X
-        lat_mesh = Y
-    elif interpolation == 'fine_grid':
-        print(f"Interpolating on a finer grid")
-        finer_values = interpolator(finer_points)
-        statistic = finer_values.reshape(Finer_X.shape)
-        lon_mesh = Finer_X
-        lat_mesh = Finer_Y
+
+    # print(f"Interpolating on the {bin_size} degrees grid")
+    # values = interpolator(points)
+    # statistic = values.reshape(X.shape)
+    # lon_mesh = X
+    # lat_mesh = Y
+    # elif interpolation == 'fine_grid':
+    print(f"Interpolating on a {interp_grid_size} grid")
+    finer_values = interpolator(finer_points)
+    statistic = finer_values.reshape(Finer_X.shape)
+    lon_mesh = Finer_X
+    lat_mesh = Finer_Y
     if type == 'density_cosmics':
         # set low values to 1
         mask_low_values = statistic < 1
@@ -970,6 +968,8 @@ def bin_data(x,y,c,interpolation = 'None', type = None):
         # set low values to 0.01
         mask_low_values = statistic < 0.01
         statistic[mask_low_values] = 0.01
+    elif 'SAA':
+        return interpolator
     else:
         raise ValueError("Please set type to convert low values, conversion ignored")
         
@@ -1014,20 +1014,33 @@ def get_SAA_mask(file):
     data_SAA = read_SAA_map(SAA_file)
 
     # Plot SAA mask
-    x = data_SAA['longitude']
-    y = data_SAA['latitude']
-    c = data_SAA['SAA_FLAG']
+    lon_SAA1D = data_SAA['longitude']
+    lat_SAA1D = data_SAA['latitude']
+    SAA_mask1D = data_SAA['SAA_FLAG']
+    
+    # Get unique sorted longitude and latitude values
+    lon_SAA2D = np.sort(np.unique(lon_SAA1D))
+    lat_SAA2D = np.sort(np.unique(lat_SAA1D))
 
-    # Bin and maks SAA mask contour
+    # Reshape `values` to fit the grid (assuming it's ordered in row-major order)
+    SAA_mask2D = SAA_mask1D.values.reshape(len(lat_SAA2D), len(lon_SAA2D))
+
+
+    # # Bin and maks SAA mask contour
     lon_min, lon_max = -180, 180
     lat_min, lat_max = -90, 90
         
-    SAA_map_bins_lon = 3
-    SAA_map_bins_lat = 2
-    x_bins_SAA = np.arange(lon_min + SAA_map_bins_lon, lon_max,SAA_map_bins_lon)
-    y_bins_SAA = np.arange(lat_min + SAA_map_bins_lat, lat_max,SAA_map_bins_lat)
+    # SAA_map_bins_lon = 3
+    # SAA_map_bins_lat = 2
+    # x_bins_SAA = np.arange(lon_min + SAA_map_bins_lon, lon_max,SAA_map_bins_lon)
+    # y_bins_SAA = np.arange(lat_min + SAA_map_bins_lat, lat_max,SAA_map_bins_lat)
 
-    SAA_masked_binned = binned_statistic_2d(x, y, c, statistic='median', bins=[x_bins_SAA, y_bins_SAA]).statistic.T
-    lon, lat = np.meshgrid(x_bins_SAA, y_bins_SAA)
+    # #SAA_masked_binned = binned_statistic_2d(x, y, c, statistic='median', bins=[x_bins_SAA, y_bins_SAA]).statistic.T
+    # lon_mesh, lat_mesh = np.meshgrid(lon, lat)
     
-    return SAA_masked_binned, lat, lon, lat_min, lat_max, lon_min, lon_max
+    # # Interpolate data onto the grid
+    # from scipy.interpolate import griddata
+    # value_grid = griddata((lon, lat), SAA_mask, (lon_mesh, lat_mesh), method='nearest')
+
+    return SAA_mask2D, lat_SAA2D, lon_SAA2D, SAA_mask1D, lat_SAA1D, lon_SAA1D, lat_min, lat_max, lon_min, lon_max
+    # return value_grid, lat_mesh, lon_mesh, lat_min, lat_max, lon_min, lon_max
