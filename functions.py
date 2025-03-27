@@ -112,6 +112,152 @@ def get_last_DarkFrame_and_BadPixelMap(folder_path):
         
     return BadPixelMap, DarkFrame
 
+def coordinates_of_cosmic_pixels(binary_data):
+    layers = len(binary_data)
+    rows = len(binary_data[0]) if layers > 0 else 0
+    columns = len(binary_data[0][0]) if rows > 0 else 0
+    result = []
+
+    def get_coords(x, y, val, visited, current_layer):
+        visit = [(x,y)]
+        coordinates = []
+
+        while visit:
+            cx, cy = visit.pop()
+            if (cx, cy) in visited:
+                continue
+
+            visited.add((cx, cy))
+            coordinates.append((cx, cy, current_layer))
+
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                nx, ny = cx + dx, cy + dy
+                if 0 <= nx < rows and 0 <= ny < columns and (nx, ny) not in visited and binary_data[current_layer][nx][ny] == val:
+                    visit.append((nx, ny))
+    
+        return coordinates
+    
+    for layer in range(layers):
+        visited = set()
+        result.append([])
+        for j in range(rows):
+            for k in range(columns):
+                if (j, k) not in visited and binary_data[layer][j][k] != 0:
+                    val = binary_data[layer][j][k]
+                    coordinates = get_coords(j, k, val, visited, layer)
+                    if len(coordinates) > 1:
+                        result[layer].append(coordinates)
+    return(result)
+
+def bias_correction(overscan_left, blank_left, image):
+    subarray = image.copy().astype('float64')
+
+    mean_overscan = []
+    mean_blank = []
+    mean_general = []
+    corrected_array = []
+
+    for i in range(len(overscan_left)):
+        mean_overscan.append(np.nanmean(overscan_left[i]))
+        mean_blank.append(np.nanmean(blank_left[i]))
+
+    if len(mean_overscan) == len(mean_blank):
+        for i in range(len(mean_overscan)):
+
+            mean = (mean_overscan[i] + mean_blank[i])/2
+            mean_general.append(mean)
+
+    for i in range(len(subarray)):
+        corrected_array.append(subarray[i] - mean_general[i])
+
+    corrected_array = np.array(corrected_array)
+    return corrected_array
+
+def read_BadPixelMap_and_DarkFrame(file):
+    hdu = fits.open(file)
+
+    map = hdu[1].data
+    return map
+
+def cut_maps(map, cx, cy):
+    
+    if len(map.shape) == 2:
+        new_map = map[cy:cy+200, cx:cx+200]
+    elif len(map.shape) == 3:
+        new_map = map[0, cy:cy+200, cx:cx+200]
+
+    return new_map
+
+def bad_pixel_correction(new_bad_pixel_map, new_dark_frame, image):
+    bad_pixel_map = new_bad_pixel_map.copy().astype('float64')
+    dark_frame = new_dark_frame.copy().astype('float64')
+    subarray = image.copy().astype('float64')
+
+    #find the non-zero elements in the bad pixel map and log the coordinates
+    coordinates_non_zero_elements = []
+    for i in range(len(bad_pixel_map)):
+        for j in range(len(bad_pixel_map[i])):
+            if bad_pixel_map[i][j] != 0:
+                coordinates_non_zero_elements.append((i,j))
+
+    readout_noise = 3.5
+    corrected_image = [layer[:] for layer in subarray]
+
+    for (x,y) in coordinates_non_zero_elements:
+        for z in range(len(subarray)):
+            value = subarray[z][x][y]
+            if value > 0:
+                corrected_image[z][x][y] = corrected_image[z][x][y] - dark_frame[x][y]
+            elif value < 0:
+                corrected_image[z][x][y] = corrected_image[z][x][y] - readout_noise
+
+    corrected_image = np.array(corrected_image)
+    return corrected_image
+
+def get_pixel_adu(images, coordinates):
+    adu = []
+    for layer in coordinates: # access each cosmic (>= 2 elements):
+        group_values = []
+        for coord in layer: # acess each pixel in cosmic, coordinate tuple (x coordinate, y coordinate, # of layer)
+            for (x,y,z) in coord:
+                group_values.append(images[z][x][y])
+        adu.append(group_values)
+    
+    return adu
+
+def calculate_electrons(adu, gain):
+    number_of_electrons = []
+    sum_electrons = []
+    for group in adu:
+        group_electrons = []
+        electrons = 0
+        for i in group:
+            electron_count = gain*i
+            electrons += electron_count
+            group_electrons.append(electron_count)
+        number_of_electrons.append(group_electrons)
+        sum_electrons.append(electrons)
+    
+    return number_of_electrons, sum_electrons
+
+def calculate_flux(adu, gain, exposure_time, stacking_order):
+    exp_time = exposure_time/stacking_order
+    pixel_flux = []
+    flux_cosmic = []
+    for group in adu:
+        group_values = []
+        sum_fluxes = 0
+        for i in group:
+            flux = (i*gain)/exp_time
+            sum_fluxes += flux
+            group_values.append(flux)
+        flux_cosmic.append(sum_fluxes)
+        pixel_flux.append(group_values)
+
+    flux_cosmic = np.array(flux_cosmic)
+       
+    return(pixel_flux, flux_cosmic)
+
 def get_edges_mask(image):
     
     edges_mask = image == 0

@@ -12,12 +12,12 @@ MIN_IMAGES = 10
 MAX_IMAGES = 3000
 PIXEL_SIZE = 13e-6
 
-def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_of_visit, generate_plots):
+def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_of_visit, generate_plots, bad_pixel_file, dark_frame):
     
     visit_skipped = 0
     
     ### Get images and metadata ###
-    images_orig, header_images, metadata_images, nb_images, height_images, width_images = read_images(Images)
+    images_orig, header_images, metadata_images, nb_images, height_images, width_images, overscan_left, blank_left, cx, cy = read_images(Images)
     
     # for testing indivisual visits
     #if Images == mainPath / "CH_PR149002_TG001301_TU2024-05-27T12-03-30_SCI_RAW_SubArray_V0300.fits":
@@ -60,8 +60,24 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     radius = np.shape(images_orig[0])[0]/2
     edges_circular_mask = create_circular_mask(size, radius)
     
+    # Bias correction 
+    images_corrected_bias = bias_correction(overscan_left, blank_left, images_orig)
+
+    ### Bad pixel correction ###
+
+    # get bad pixel map and cut to relevant position
+
+    bad_pixel_map = read_BadPixelMap_and_DarkFrame(bad_pixel_file)
+    bad_pixel_map_cut = cut_maps(bad_pixel_map, cx, cy)
+    dark_frame = read_BadPixelMap_and_DarkFrame(dark_frame)
+    dark_frame_cut = cut_maps(dark_frame, cx, cy) 
+
+    # correct for bad pixels
+
+    corrected_images = bad_pixel_correction(bad_pixel_map_cut, dark_frame_cut, images_corrected_bias)
+
     # Apply circular mask
-    images = apply_mask_to_images(images_orig, edges_circular_mask, 0)
+    images = apply_mask_to_images(corrected_images, edges_circular_mask, 0)
     
      ### Subtract the median image ###
     subtracted_median_images = subtract_median_image(images, edges_circular_mask)
@@ -108,7 +124,15 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     ### Detect cosmics ###
     binary_images, loc_cosmics, info_cosmics = detect_cosmics(masked_images, threshold_cosmics) 
     
-    
+    ### Get energies from cosmics ###
+    derotated_original_images = derotate_images(roll_angle_file, images_orig, nb_images, height_images, width_images)
+    coordiantes_pixels = coordinates_of_cosmic_pixels(binary_images)
+    adu_per_pixel = get_pixel_adu(derotated_original_images, coordiantes_pixels)
+    gain = 0.5111
+
+    electrons_per_pixel, electrons_per_cosmic = calculate_electrons(adu_per_pixel, gain)
+    flux_per_pixel, flux_per_cosmic = calculate_flux(adu_per_pixel, gain, total_exp_time, n_exp) #use total_exp_time and stacking order
+
     # Get some useful quantities 
 
     nb_masked_pixels = np.sum(edges_circular_mask | contaminant_mask) # number of pixels that are masked (edged + mask)
@@ -212,10 +236,10 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     data = pd.DataFrame(data =    {
                                 'visit_ID': np.full(nb_images, id),
                                 'img_counter': np.arange(nb_images),
-                                # 'raw_images': flattened_images,
-                                # 'derotated_images': flattened_derotated_images,
-                                # 'masked_images': flattened_masked_images, 
-                                # 'binary_images': flattened_binary_images,
+                                'raw_images': flattened_images,
+                                'derotated_images': flattened_derotated_images,
+                                'masked_images': flattened_masked_images, 
+                                'binary_images': flattened_binary_images,
                                 # 'mask': flattened_mask,
                                 'JD': time_images_utc_jd,
                                 'time': time_images_utc,
@@ -227,10 +251,13 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
                                 'nb_masked_pixels': nb_masked_pixels.astype(int),
                                 'percentage_cosmics': percentage_cosmic_pixels,
                                 'percentage_cosmics_per_s': percentage_cosmic_pixels_per_s,
+                                'flux_per_cosmic': flux_per_cosmic,
+                                'electrons_per_cosmic': electrons_per_cosmic,
                                 'im_height': np.full(nb_images, height_images),
                                 'im_width': np.full(nb_images, width_images),
                                 'threshold_cosmics': np.full(nb_images, threshold_cosmics),
                                 'n_exp': np.full(nb_images, n_exp),
+                                'exp_time': np.full(nb_images, exp_time),
                                 'total_exp_time': np.full(nb_images, total_exp_time),
                                 'los_to_sun': np.full(nb_images, los_to_sun),
                                 'los_to_moon': np.full(nb_images, los_to_moon),
@@ -320,6 +347,7 @@ if __name__ == "__main__":
     else: # on local machine
         visits_folder = MAIN_PATH / "test_visits"
         image_files_list, roll_angle_files_list = get_files_with_substring(visits_folder)
+        bad_pixel_file, dark_frame = get_last_DarkFrame_and_BadPixelMap(visits_folder)
         image_files_list = np.sort(image_files_list)
         roll_angle_files_list = np.sort(roll_angle_files_list)
 
@@ -355,7 +383,7 @@ if __name__ == "__main__":
             pass
         print(f"########################")
         print(f"Processing visit {i+1} of {len(image_files_list)} ({visit})...")
-        df, skipped = main_loop(image_files_list[i], roll_angle_files_list[i], threshold_noise, threshold_cosmics, visit_type, generate_plots)
+        df, skipped = main_loop(image_files_list[i], roll_angle_files_list[i], threshold_noise, threshold_cosmics, visit_type, generate_plots, bad_pixel_file, dark_frame)
 
         if skipped != 0:
             skipped_val.append(skipped)
