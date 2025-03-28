@@ -37,14 +37,19 @@ def read_images(file):
     images = hdu[1].data
     header = hdu[1].header
     metadata = hdu[metadata_idx].data
+    overscan_left = hdu[7].data
+    blank_left = hdu[2].data
     hdu.close()
 
     nb_images = np.shape(images)[0]    
     height_images = np.shape(images)[1]
     width_images = np.shape(images)[2]
 
+    cx = header['X_WINOFF']
+    cy = header['Y_WINOFF']
+
     
-    return images, header, metadata, nb_images, height_images, width_images
+    return images, header, metadata, nb_images, height_images, width_images, overscan_left, blank_left, cx, cy
 
 def read_attitude(file):
     
