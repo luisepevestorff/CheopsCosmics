@@ -11,6 +11,10 @@ from sqlalchemy import text
 import ipywidgets
 from scipy.stats import binned_statistic_2d
 from pyproj import Transformer
+from pyproj import Geod
+from geographiclib.geodesic import Geodesic
+from shapely import Polygon, wkt
+from geographiclib.polygonarea import PolygonArea
 
 
 MAIN_PATH = Path.cwd()
@@ -1281,13 +1285,12 @@ def bin_data_polar(x,y,c,interp_grid_size = 2.5, type = None):
 
     return interpolated, bin_centers_x, bin_centers_y, lon_mesh, lat_mesh
 
-def transform_deg2_to_km2(area_in_deg2, orbit_height):
-    radius_earth = 6378 #in kilometers
+def area_spherical_polygon(points, radius):
+    geod = Geodesic(radius, 0)
+    poly = PolygonArea(geod, False)
 
-    radius_orbit = radius_earth + orbit_height
-    degrees_on_sphere = 360 * 180
-    square_deg = (4*np.pi*(radius_orbit**2))/degrees_on_sphere
+    for lon, lat in points:
+        poly.AddPoint(lat,lon)
 
-    area_kilo = area_in_deg2 * square_deg
-
-    return area_kilo
+    number, perimeter, area = poly.Compute()
+    return abs(area)
