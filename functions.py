@@ -10,6 +10,7 @@ from pathlib import Path
 from sqlalchemy import text
 import ipywidgets
 from scipy.stats import binned_statistic_2d
+from pyproj import Transformer
 
 
 MAIN_PATH = Path.cwd()
@@ -1089,8 +1090,8 @@ def bin_data(x,y,c,interp_grid_size = 2.5, type = None):
 
     # # Define a finer grid for finer interpolation
     # nb_points_finer_grid = 200
-    finer_x = np.arange(lon_min, lon_max+interp_grid_size, interp_grid_size)
-    finer_y = np.arange(lat_min, lat_max+interp_grid_size, interp_grid_size)
+    finer_x = np.arange(lon_min-interp_grid_size, lon_max+interp_grid_size, interp_grid_size)
+    finer_y = np.arange(lat_min-interp_grid_size, lat_max+interp_grid_size, interp_grid_size)
     Finer_X, Finer_Y = np.meshgrid(finer_x, finer_y)
     # finer_x = np.linspace(bin_centers_x.min(), bin_centers_x.max(), nb_points_finer_grid)  # More points
     # finer_y = np.linspace(bin_centers_y.min(), bin_centers_y.max(), nb_points_finer_grid)  # More points
@@ -1197,3 +1198,96 @@ def get_SAA_mask(file):
 
     return SAA_mask2D, lat_SAA2D, lon_SAA2D, SAA_mask1D, lat_SAA1D, lon_SAA1D, lat_min, lat_max, lon_min, lon_max
     # return value_grid, lat_mesh, lon_mesh, lat_min, lat_max, lon_min, lon_max
+
+def latlon_to_cartesian(lat, lon, radius=6378000):
+    lat_radians = np.radians(lat)
+    lon_radians = np.radians(lon)
+
+    x = radius * np.cos(lat_radians) * np.cos(lon_radians)
+    y = radius * np.cos(lat_radians) * np.sin(lon_radians)
+    z = radius * np.sin(lat_radians)
+    
+    return np.stack([x,y,z], axis=-1)
+
+def bin_data_polar(x,y,c,interp_grid_size = 2.5, type = None):
+    ### used to interpolte at the polar regions -> hasd to be used in tandem with PolarStereo projections
+
+    from scipy.interpolate import RBFInterpolator
+
+    # set bins and mask SAA contour
+    lon_min, lon_max = -180, 180
+    lat_min, lat_max = -90, 90
+
+    bin_size = 5
+    x_bins = np.arange(lon_min, lon_max + bin_size, bin_size)
+    y_bins = np.arange(lat_min, lat_max + bin_size, bin_size)\
+    
+    # bin data
+    ret = binned_statistic_2d(x,y,c, statistic='median', bins=[x_bins, y_bins])
+    statistic = ret.statistic.T
+    x_edges = ret.x_edge
+    y_edges = ret.y_edge
+
+    # compute bin centers
+    bin_centers_x = (x_edges[:-1] + x_edges[1:]) / 2
+    bin_centers_y = (y_edges[:-1] + y_edges[1:]) / 2
+    X, Y = np.meshgrid(bin_centers_x,bin_centers_y)
+
+    # flatten the arrays
+    points_lonlat = np.column_stack([X.ravel(), Y.ravel()])
+    values = statistic.ravel()
+
+    # remove NaNs
+    mask = ~np.isnan(values)
+    valid_points_lonlat = points_lonlat[mask]
+    valid_values = values[mask]
+
+    # convert valid lon/lat points into 3D cartesian
+    valid_lats = valid_points_lonlat[:, 1]
+    valid_lons = valid_points_lonlat[:, 0]
+    valid_points_cartesian = latlon_to_cartesian(valid_lats, valid_lons)
+
+    # define finer interpolation grid
+    finer_x = np.arange(lon_min, lon_max + interp_grid_size, interp_grid_size)
+    finer_y = np.arange(lat_min, lat_max + interp_grid_size, interp_grid_size)
+    Finer_X, Finer_Y = np.meshgrid(finer_x, finer_y)
+
+    # convert finer interpolation grid to 3D cartesian
+    finer_lats = Finer_Y.ravel()
+    finer_lons = Finer_X.ravel()
+    finer_cartesian = latlon_to_cartesian(finer_lats, finer_lons)
+
+
+    # RBF interpolation in cartesian 3D
+    interpolator = RBFInterpolator(valid_points_cartesian, valid_values, kernel='linear', smoothing =0)
+    finer_values = interpolator(finer_cartesian)
+    interpolated = finer_values.reshape(Finer_X.shape)
+
+    lon_mesh, lat_mesh = Finer_X, Finer_Y
+
+    if type == 'density_cosmics':
+        # set low values to 1
+        mask_low_values = interpolated < 1
+        interpolated[mask_low_values] = 1
+    elif type in ('percentage_cosmics', 'percentage_cosmics_per_s'):
+        # set low values to 0.01
+        mask_low_values = interpolated < 0.01
+        interpolated[mask_low_values] = 0.01
+    elif 'SAA' in (type or ''):
+        return interpolator
+    else:
+        raise ValueError("Please set type to convert low values, conversion ignored")
+    
+
+    return interpolated, bin_centers_x, bin_centers_y, lon_mesh, lat_mesh
+
+def transform_deg2_to_km2(area_in_deg2, orbit_height):
+    radius_earth = 6378 #in kilometers
+
+    radius_orbit = radius_earth + orbit_height
+    degrees_on_sphere = 360 * 180
+    square_deg = (4*np.pi*(radius_orbit**2))/degrees_on_sphere
+
+    area_kilo = area_in_deg2 * square_deg
+
+    return area_kilo
