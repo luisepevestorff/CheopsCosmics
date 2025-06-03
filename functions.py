@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import colors
+from matplotlib.path import Path as PATH
 from astropy.io import fits
 import numpy as np
 from scipy.optimize import curve_fit
@@ -10,11 +11,15 @@ from pathlib import Path
 from sqlalchemy import text
 import ipywidgets
 from scipy.stats import binned_statistic_2d
-from pyproj import Transformer
-from pyproj import Geod
+from pyproj import Transformer, Geod, CRS
 from geographiclib.geodesic import Geodesic
-from shapely import Polygon, wkt
+from shapely.geometry import Polygon, MultiPolygon, GeometryCollection
+from shapely.geometry.polygon import orient
+from shapely.ops import unary_union
 from geographiclib.polygonarea import PolygonArea
+import cartopy.crs as ccrs
+from cartopy.feature import ShapelyFeature
+from scipy.integrate import quad
 
 
 MAIN_PATH = Path.cwd()
@@ -301,7 +306,6 @@ def subtract_median_image(images, circular_mask):
 
     median_images = np.abs(median_images)
     return median_images
-
 
 def derotate_SAA(attitude_file, images, metadata_images, nb_images, height_images, width_images):
     
@@ -628,6 +632,7 @@ def create_circular_mask(size, radius):
     distance_from_center = np.sqrt((x - center_x)**2 + (y - center_y)**2)
     # Create a mask for points within the radius
     mask_circular = distance_from_center > radius
+    print(mask_circular)
     # Apply the mask to the array
     #mask_circular[mask] = 1
     
@@ -1213,18 +1218,25 @@ def latlon_to_cartesian(lat, lon, radius=6378000):
     
     return np.stack([x,y,z], axis=-1)
 
-def bin_data_polar(x,y,c,interp_grid_size = 2.5, type = None):
-    ### used to interpolte at the polar regions -> hasd to be used in tandem with PolarStereo projections
-
+def bin_data_polar(x,y,c,interp_grid_size = 2.5, lon_min = None, lon_max = None, lat_min = None, lat_max = None, type = None,):
     from scipy.interpolate import RBFInterpolator
 
     # set bins and mask SAA contour
-    lon_min, lon_max = -180, 180
-    lat_min, lat_max = -90, 90
+    if lon_min is None and lon_max is None:
+        lon_min, lon_max = -180, 180
+    else:
+        lon_min = lon_min
+        lon_max = lon_max
+
+    if lat_min is None and lat_max is None:
+        lat_min, lat_max = -90, 90
+    else:
+        lat_min = lat_min
+        lat_max = lat_max
 
     bin_size = 5
     x_bins = np.arange(lon_min, lon_max + bin_size, bin_size)
-    y_bins = np.arange(lat_min, lat_max + bin_size, bin_size)\
+    y_bins = np.arange(lat_min, lat_max + bin_size, bin_size)
     
     # bin data
     ret = binned_statistic_2d(x,y,c, statistic='median', bins=[x_bins, y_bins])
@@ -1285,12 +1297,140 @@ def bin_data_polar(x,y,c,interp_grid_size = 2.5, type = None):
 
     return interpolated, bin_centers_x, bin_centers_y, lon_mesh, lat_mesh
 
-def area_spherical_polygon(points, radius):
-    geod = Geodesic(radius, 0)
-    poly = PolygonArea(geod, False)
+def wrap_longitude(longitude):
+    """
+    Function to ensure that the longitude coordinates are wrapped to [-180, 180].
+    """
+    if longitude < -180:
+        return longitude + 360
+    elif longitude > 180:
+        return longitude - 360
+    else:
+        return longitude
 
-    for lon, lat in points:
-        poly.AddPoint(lat,lon)
+def wrap_latitude(latitude):
+    """
+    Function to ensure that the latitude coordinates are wrapped to [90, 90].
+    """
 
-    number, perimeter, area = poly.Compute()
-    return abs(area)
+    if latitude < -90:
+        return latitude + 180
+    elif latitude > 90:
+        return latitude - 180
+    else:
+        return latitude
+
+def area_in_kilometres(paths, radius):
+    """
+    Function to compute the spherical area of a polygon.
+    """
+    geod = Geodesic(radius, 0) #spherical model with no flattening
+    poly = geod.Polygon()
+    area_individual_polygons = []
+    perimeter_individual_polygons = []
+
+    for path in paths:
+        if path is not None:
+            total_area_km = 0.0
+            vertices = path.vertices
+            wrapped_vertices = [(wrap_longitude(lat), wrap_latitude(lon)) for lat, lon in vertices]
+            codes = path.codes
+            indices = np.where(codes == PATH.MOVETO)[0]
+            vertices_segments = np.split(wrapped_vertices, indices)[1:]
+        #vertices_segments = np.split(vertices, indices)[1:]
+        # code_segments = np.split(codes, indices)[1:]
+
+        # for codes, vertices in zip(code_segments, vertices_segments):
+        #     #print(vertices)
+        #     poly.Clear()
+        #     for pts in vertices[:-1]:
+        #         poly.AddPoint(pts[1], pts[0])
+
+            for vertices in vertices_segments:
+                poly.Clear()
+                for pts in vertices[:-1]:
+                    poly.AddPoint(pts[1], pts[0])
+
+            
+                _, perimeter, area = poly.Compute()
+                perimeter = perimeter/1e3
+                perimeter_individual_polygons.append(perimeter)
+                area_individual_polygons.append(area)
+            # print(area_individual_polygons)
+            # print(perimeter_individual_polygons)
+
+            #print(area_individual_polygons)
+            area_individual_polygons = np.array(area_individual_polygons)
+            area_individual_polygons = -np.sort(-area_individual_polygons)
+
+            if len(area_individual_polygons) > 0:
+                first_item = area_individual_polygons[0]
+                total_area_km = area_individual_polygons[0]
+                for i in range(1, len(area_individual_polygons)):
+                    if area_individual_polygons[i] > 0.1*first_item or area_individual_polygons[i] == first_item:
+                        total_area_km += area_individual_polygons[i]
+                    else:
+                        total_area_km -= area_individual_polygons[i]
+
+            return perimeter_individual_polygons, total_area_km/1e6
+        else:
+            return 0.0
+
+def area_in_degrees(paths):
+    """
+    Function to compute the spherical area of polygon.
+    """
+    area_individual_polygons = []
+
+    for path in paths:
+        if path is not None:
+            vertices = path.vertices
+            codes = path.codes
+            indices = np.where(codes == PATH.MOVETO)[0]
+            vertices_segments = np.split(vertices, indices)[1:]
+            # code_segments = np.split(codes, indices)[1:]
+
+            # for codes, vertices in zip(code_segments, vertices_segments):
+            #         area = Polygon(vertices[1:]).area
+            #         area_individual_polygons.append(area)
+
+            for vertices in vertices_segments:
+                area = Polygon(vertices[1:]).area
+                area_individual_polygons.append(area)
+
+        
+            area_individual_polygons = np.array(area_individual_polygons)
+            area_individual_polygons = -np.sort(-area_individual_polygons)
+            
+            total_area_deg = 0
+            if len(area_individual_polygons) > 0:
+                first_item = area_individual_polygons[0]
+                total_area_deg = area_individual_polygons[0]
+                for i in range(1, len(area_individual_polygons)):
+                        if area_individual_polygons[i] > 0.1*first_item or area_individual_polygons[i] == first_item:
+                            total_area_deg += area_individual_polygons[i]
+                        elif area_individual_polygons[i] == 0:
+                            total_area_deg = 0
+                        else:
+                            total_area_deg -= area_individual_polygons[i]
+
+
+            return total_area_deg
+
+        else:
+            return 0.0
+
+def location_change(paths):
+    for path in paths:
+        vertices = path.vertices
+        lon = vertices[:,0]
+        lat = vertices[:,1]
+  
+        # measure change in location
+        north = np.max(lat) if lat.size > 0 else 0
+        south = np.min(lat) if lat.size > 0 else 0
+        east = np.max(lon) if lon.size > 0 else 0
+        west = np.min(lon) if lon.size > 0 else 0
+        coords = (north, east, south, west)
+
+    return coords
