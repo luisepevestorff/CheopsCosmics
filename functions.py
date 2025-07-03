@@ -106,8 +106,8 @@ def get_last_DarkFrame_and_BadPixelMap(folder_path):
     # Get list of files in the folder
     files = os.listdir(folder_path)
     
-    num_files=5 # number of files to check
-    
+    #num_files=5 # number of files to check
+    num_files=len(files) # number of files to check - now it checks all
     # Get file paths and their corresponding modification times
     file_times = [(os.path.join(folder_path, file), os.path.getmtime(os.path.join(folder_path, file))) for file in files]
     
@@ -116,11 +116,11 @@ def get_last_DarkFrame_and_BadPixelMap(folder_path):
     
     BadPixelMap = None
     DarkFrame = None
-    
     for file in sorted_files[:num_files]:
-        if ((BadPixelMap is None) & ('BadPixelMap' in file[0])):
+        
+        if ((BadPixelMap is None) and ('BadPixelMap' in file[0])):
                 BadPixelMap = file[0]
-        elif ((DarkFrame is None) & ('DarkFrame' in file[0])):
+        elif ((DarkFrame is None) and ('DarkFrame' in file[0])):
                 DarkFrame = file[0]
         else:
             continue
@@ -445,7 +445,7 @@ def create_contaminant_mask(derotated_openCV_images, edges_mask, saa_or_science,
         ax[3].set_title('Applied mask', weight = 'bold')
         plt.colorbar(im)
 
-        # plt.show()   
+        plt.show()   
 
     return final_mask, threshold
 
@@ -632,7 +632,6 @@ def create_circular_mask(size, radius):
     distance_from_center = np.sqrt((x - center_x)**2 + (y - center_y)**2)
     # Create a mask for points within the radius
     mask_circular = distance_from_center > radius
-    print(mask_circular)
     # Apply the mask to the array
     #mask_circular[mask] = 1
     
@@ -642,9 +641,10 @@ def genreate_diagnostic_plots(derotated_openCV_images, images, subtracted_median
     
     output_plots = MAIN_PATH / "output_plots"
     output_plots.mkdir(parents=True, exist_ok=True)
+
     
     plt.close('all')
-    fig, ax = plt.subplots(ncols = 8, nrows=2, figsize=(35,8))
+    fig, axs = plt.subplots(ncols = 8, nrows=2, figsize=(35,8))
     plt.subplots_adjust(left=0.05, right=0.99)
     median_image = np.nanmedian(derotated_openCV_images, axis=(0))
     mean_image = np.nanmean(derotated_openCV_images, axis=(0))
@@ -652,59 +652,75 @@ def genreate_diagnostic_plots(derotated_openCV_images, images, subtracted_median
     # ax[0,0].hist(np.log(images[n]+1).flatten(), bins = 100)
     # ax[1,0].imshow(np.log(images[n]+1), origin = "lower")
     # ax[0,0].set_title("Original subArray (log)")
-    ax[0,0].hist(images[n].flatten(), bins = 100)
-    ax[1,0].imshow(images[n], origin = "lower")
-    ax[0,0].set_title("Original subArray")
-    ax[0,0].set_ylim(0,100)
-    ax[0,1].hist(subtracted_median_images[n].flatten(), bins = 100)#len(np.unique(subtracted_median_images[n].flatten())))
-    ax[1,1].imshow(subtracted_median_images[n], origin = "lower")
-    ax[0,1].set_title("median value removed")
-    ax[0,1].set_ylim(0,100)
-    ax[0,2].hist(temporal_median_substracted_images[n].flatten(), bins = 100)#len(np.unique(temporal_median_substracted_images[n].flatten())))
-    ax[1,2].imshow(temporal_median_substracted_images[n], origin = "lower")
-    ax[0,2].set_title("median of pixels removed")
-    ax[0,2].set_ylim(0,100)
+    # ax[0,0].hist(images[n].flatten(), bins = 100)
+    axs[1,0].imshow(images[n], origin = "lower")
+    axs[0,0].set_title("Original subArray")
+    axs[0,0].set_ylim(0,100)
+    axs[0,1].hist(subtracted_median_images[n].flatten(), bins = 100)#len(np.unique(subtracted_median_images[n].flatten())))
+    axs[1,1].imshow(subtracted_median_images[n], origin = "lower")
+    axs[0,1].set_title("median value removed")
+    axs[0,1].set_ylim(0,100)
+    axs[0,2].hist(temporal_median_substracted_images[n].flatten(), bins = 100)#len(np.unique(temporal_median_substracted_images[n].flatten())))
+    axs[1,2].imshow(temporal_median_substracted_images[n], origin = "lower")
+    axs[0,2].set_title("median of pixels removed")
+    axs[0,2].set_ylim(0,100)
     # ax[0,3].hist(derotated_openCV_images[n].flatten(), bins = len(np.unique(derotated_openCV_images[n].flatten())))
     # ax[1,3].imshow(derotated_openCV_images[n], origin = "lower")
     # ax[0,3].set_title("derotated converted image")
     # ax[0,3].hist(np.log(derotated_openCV_images[n].flatten()+1), bins = len(np.unique(derotated_openCV_images[n].flatten())))
-    ax[1,3].imshow(np.log(derotated_openCV_images[n]+1), origin = "lower")
-    ax[0,3].set_ylim(0,500)
-    ax[0,3].set_title("log(derotated converted image)")
+    axs[1,3].imshow(np.log(derotated_openCV_images[n]+1), origin = "lower")
+    axs[0,3].set_ylim(0,500)
+    axs[0,3].set_title("log(derotated converted image)")
     #ax[0,3].set_xscale('log')
-    ax[0,4].hist(median_image.flatten(), bins = len(np.unique(median_image.flatten())))
-    ax[0,4].axvline(threshold_noise, c = 'C2', linewidth = 2)
-    ax[1,4].imshow(median_image, origin = "lower",norm=colors.LogNorm())
-    ax[0,4].set_xlim(0,5*threshold_noise)
-    ax[0,4].set_title("median image of visit")
+    axs[0,4].hist(median_image.flatten(), bins = len(np.unique(median_image.flatten())))
+    axs[0,4].axvline(threshold_noise, c = 'C2', linewidth = 2)
+    axs[1,4].imshow(median_image, origin = "lower",norm=colors.LogNorm())
+    axs[0,4].set_xlim(0,5*threshold_noise)
+    axs[0,4].set_title("median image of visit")
     #ax[0,4].set_xscale('log')
     # ax[0,5].hist(mean_image.flatten(), bins = len(np.unique(mean_image.flatten())))
     # ax[0,5].axvline(threshold_noise, c = 'C2', linewidth = 2)
     # ax[1,5].imshow(mean_image, origin = "lower")
     # ax[0,5].set_ylim(0,100)
     # ax[0,5].set_title("mean image of visit")
-    ax[1,5].imshow(mask, origin = "lower")
-    ax[0,5].set_ylim(0,100)
-    ax[0,5].set_title("designed mask")
+    axs[1,5].imshow(mask, origin = "lower")
+    axs[0,5].set_ylim(0,100)
+    axs[0,5].set_title("designed mask")
     # ax[0,6].hist(np.log(masked_images[n]+0.1).flatten(), bins = len(np.unique(masked_images[n].flatten())))
     # ax[1,6].imshow(np.log(masked_images[n]+0.1), origin = "lower")
     # ax[0,6].axvline(np.log(threshold_cosmics+0.1), c = 'C2', linewidth = 2)
     # ax[0,6].set_title("log(masked image + 0.1)")
-    ax[0,6].hist(masked_images[n].flatten(), bins = 100)# len(np.unique(masked_images[n].flatten())))
-    ax[1,6].imshow(masked_images[n], origin = "lower")
-    ax[0,6].axvline(threshold_cosmics, c = 'C2', linewidth = 2)
-    ax[0,6].set_title("masked image")
-    ax[0,6].set_xlim(0,5*threshold_cosmics)
-    ax[0,6].set_ylim(0,100)
-    ax[0,7].hist(binary_images[n].flatten(), bins = len(np.unique(binary_images[n].flatten())))
-    ax[1,7].imshow(binary_images[n], origin = "lower")
-    ax[0,7].text(0.25,0.9,f"{int(nb_cosmics)} detected cosmics", weight = 'bold', transform=ax[0,7].transAxes)
-    ax[0,7].set_title("detected cosmics")
+    axs[0,6].hist(masked_images[n].flatten(), bins = 100)# len(np.unique(masked_images[n].flatten())))
+    axs[1,6].imshow(masked_images[n], origin = "lower")
+    axs[0,6].axvline(threshold_cosmics, c = 'C2', linewidth = 2)
+    axs[0,6].set_title("masked image")
+    axs[0,6].set_xlim(0,5*threshold_cosmics)
+    axs[0,6].set_ylim(0,100)
+    axs[0,7].hist(binary_images[n].flatten(), bins = len(np.unique(binary_images[n].flatten())))
+    axs[1,7].imshow(binary_images[n], origin = "lower")
+    axs[0,7].text(0.25,0.9,f"{int(nb_cosmics)} detected cosmics", weight = 'bold', transform=axs[0,7].transAxes)
+    axs[0,7].set_title("detected cosmics")
     fig.suptitle(title)
     plt.savefig(output_plots/plot_name, dpi = 600,format = 'png')
+    
+    rows, cols = axs.shape
+    for row in range(rows):
+        for col in range(cols):
+            ax = axs[row,col]
+            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            fig.savefig(f"{output_plots}/{plot_name}_{row}_{col}", dpi = 600,format = 'png', bbox_inches=extent)
+
+    # ax[1,0].savefig(f"{output_plots}/{plot_name}" + "_original_subarray", dpi = 600,format = 'png')
+    # ax[1,1].savefig(f"{output_plots}/{plot_name}" + "_median_value_removed", dpi = 600,format = 'png')
+    # ax[1,2].savefig(f"{output_plots}/{plot_name}" + "_median_pixels_removed", dpi = 600,format = 'png')
+    # ax[1,3].savefig(f"{output_plots}/{plot_name}" + "_log_derotated", dpi = 600,format = 'png')
+    # ax[1,4].savefig(f"{output_plots}/{plot_name}" + "_median_image_of_visit", dpi = 600,format = 'png')
+    # ax[1,5].savefig(f"{output_plots}/{plot_name}" + "_designed_mask", dpi = 600,format = 'png')
+    # ax[1,6].savefig(f"{output_plots}/{plot_name}" + "_masked_image", dpi = 600,format = 'png')
+    # ax[1,7].savefig(f"{output_plots}/{plot_name}" + "_detected_cosmics", dpi = 600,format = 'png')
         
-    if show_plot:
-        plt.show()
+    #if show_plot:
+        #plt.show()
 
 def find_threshold(image, inspect_hist=True):
     images = image.copy()

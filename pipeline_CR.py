@@ -122,7 +122,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
     # print(f"{nb_of_removed_images_straylight} images with straylight were removed.")
     
     ### Detect cosmics ###
-    binary_images, loc_cosmics, info_cosmics = detect_cosmics(masked_images, threshold_cosmics) 
+    binary_images, loc_cosmics, info_cosmics, _ = detect_cosmics(masked_images, threshold_cosmics) 
     
     ### Get energies from cosmics ###
     derotated_original_images = derotate_images(roll_angle_file, images_orig, nb_images, height_images, width_images)
@@ -199,7 +199,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
         j += 1
             
     plt.legend()
-    plt.show()
+    #plt.show()
     
          
     if generate_plots:
@@ -207,7 +207,7 @@ def main_loop(Images, roll_angle_file, threshold_noise, threshold_cosmics, type_
         nb_cosmics_plot = nb_cosmics[n]
         title_plot = f"{id}, {target_name}, nexp: {n_exp}, exptime:{exp_time}, Texptime: {total_exp_time} "
         name_plot = f"SAA_visit_{id}_frame_{n}.png" if visit_type == 'SAA' else f"visit_{id}_frame_{n}.png"
-        genreate_diagnostic_plots(derotated_openCV_images, images, subtracted_median_images, temporal_median_substracted_images, threshold_noise, threshold_cosmics, contaminant_mask, masked_images, binary_images, n, nb_cosmics_plot, title_plot, name_plot, show_plot = False)
+        genreate_diagnostic_plots(derotated_openCV_images, images, subtracted_median_images, temporal_median_substracted_images, threshold_noise, threshold_cosmics, contaminant_mask, masked_images, binary_images, n, nb_cosmics_plot, title_plot, name_plot, show_plot = True)
     
     
     print(f'{nb_masked_pixels} masked pixels')
@@ -356,7 +356,7 @@ if __name__ == "__main__":
     threshold_noise_science = 10 # This is now scaled by sqrt(nexp) in the main loop. TBD: replace with a gaussian fit of the noise
     threshold_cosmics = 250
 
-    generate_plots = False
+    generate_plots = True
 
     # For a single visit
     '''
